@@ -1,9 +1,7 @@
 name: qwen-local-app-build
 
 on:
-  workflow_dispatch:
-  push:
-    branches: [ main ]
+  workflow_dispatch:   # 仅手动触发，避免 push 重复跑
 
 jobs:
   build:
@@ -12,24 +10,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ========== 1. 安装 JDK17 + Android SDK + NDK ==========
+      # ========== 1. 安装 JDK17 ==========
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Install Android SDK & NDK
+      # ========== 2. 准备 Android SDK（定位 sdkmanager） ==========
+      - name: Setup Android SDK
         run: |
-          SDK_ROOT=$ANDROID_HOME
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
           echo "SDK_ROOT=$SDK_ROOT"
-          # 接受许可
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          # 安装 build-tools / platform / NDK
-          sdkmanager --install "build-tools;34.0.0" "platforms;android-34" "ndk;26.1.10909125" > /dev/null 2>&1 || \
-          sdkmanager --install "build-tools;34.0.0" "platforms;android-34" "ndk;25.2.9519653"
-          echo "NDK installed"
-          ls $SDK_ROOT/ndk/
+          # 定位 sdkmanager（GitHub runner 预装于 cmdline-tools/latest/bin）
+          if [ -f "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          elif [ -f "$SDK_ROOT/cmdline-tools/bin/sdkmanager" ]; then
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/bin/sdkmanager"
+          else
+            echo "未找到 sdkmanager，安装 cmdline-tools..."
+            mkdir -p "$SDK_ROOT/cmdline-tools"
+            cd /tmp
+            curl -sL -o clt.zip "https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip"
+            unzip -q clt.zip -d "$SDK_ROOT/cmdline-tools"
+            mv "$SDK_ROOT/cmdline-tools/cmdline-tools" "$SDK_ROOT/cmdline-tools/latest"
+            SDKMANAGER="$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager"
+          fi
+          echo "SDKMANAGER=$SDKMANAGER"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" --install "build-tools;34.0.0" "platforms;android-34" "ndk;25.2.9519653" "ndk;26.1.10909125" 2>&1 | tail -3 || true
+          echo "ANDROID_HOME=$SDK_ROOT" >> $GITHUB_ENV
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
+          # 写 local.properties 供 Gradle 定位
+          echo "sdk.dir=$SDK_ROOT" > "$GITHUB_WORKSPACE/local.properties"
+          ls "$SDK_ROOT/build-tools/" "$SDK_ROOT/platforms/" "$SDK_ROOT/ndk/" 2>/dev/null
 
       # ========== 2. 交叉编译 llama.cpp (android arm64) ==========
       - name: Build llama.cpp for Android arm64
