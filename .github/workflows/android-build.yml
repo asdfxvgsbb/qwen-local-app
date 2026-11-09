@@ -81,7 +81,10 @@ jobs:
             -DLLAMA_BUILD_EXAMPLES=ON \
             -DLLAMA_BUILD_SERVER=ON
 
-          make -j$(nproc) llama-server 2>&1 | tail -8
+          # pipefail 避免管道吞掉错误码；完整输出错误
+          set -o pipefail
+          make -j$(nproc) llama-server 2>&1 | tail -60
+          echo "make exit: ${PIPESTATUS[0]}"
           echo "=== bin 目录 ==="
           ls -la bin/
           FILE_BIN=$(find . -name "llama-server" -type f | head -1)
