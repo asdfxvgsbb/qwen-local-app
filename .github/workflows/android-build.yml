@@ -38,72 +38,49 @@ jobs:
           fi
           echo "SDKMANAGER=$SDKMANAGER"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-          "$SDKMANAGER" --install "build-tools;34.0.0" "platforms;android-34" "ndk;25.2.9519653" "ndk;26.1.10909125" 2>&1 | tail -3 || true
+          "$SDKMANAGER" --install "build-tools;34.0.0" "platforms;android-34" 2>&1 | tail -3 || true
           echo "ANDROID_HOME=$SDK_ROOT" >> $GITHUB_ENV
           echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> $GITHUB_ENV
           # 写 local.properties 供 Gradle 定位
           echo "sdk.dir=$SDK_ROOT" > "$GITHUB_WORKSPACE/local.properties"
-          ls "$SDK_ROOT/build-tools/" "$SDK_ROOT/platforms/" "$SDK_ROOT/ndk/" 2>/dev/null
+          ls "$SDK_ROOT/build-tools/" "$SDK_ROOT/platforms/" 2>/dev/null
 
-      # ========== 2. 交叉编译 llama.cpp (android arm64) ==========
-      - name: Build llama.cpp for Android arm64
+      # ========== 2b. 下载官方预编译 llama.cpp Android arm64 ==========
+      - name: Download llama.cpp android arm64 prebuilt
         run: |
           set -e
-          SDK_ROOT=${ANDROID_HOME:-$ANDROID_SDK_ROOT}
-          NDK=$(ls -d $SDK_ROOT/ndk/* | head -1)
-          echo "Using NDK: $NDK"
-          TOOLCHAIN=$NDK/toolchains/llvm/prebuilt/linux-x86_64
-          echo "TOOLCHAIN=$TOOLCHAIN"
+          # 官方 nightly 预编译包（服务器直连 GitHub 很快）
+          URL="https://github.com/ggml-org/llama.cpp/releases/download/b12212/llama-b12212-bin-android-arm64.tar.gz"
+          echo "下载: $URL"
+          curl -sL "$URL" -o /tmp/llama-android.tar.gz || \
+          curl -sL "https://gh-proxy.com/$URL" -o /tmp/llama-android.tar.gz
+          ls -la /tmp/llama-android.tar.gz
+          mkdir -p /tmp/llama-unpack
+          tar -xzf /tmp/llama-android.tar.gz -C /tmp/llama-unpack
+          echo "=== 解压内容 ==="
+          find /tmp/llama-unpack -type f | head -40
 
-          # 下载 llama.cpp 源码（用 b10000 对应 tag，proot 下稳定版；Android 原生不受影响）
-          git clone --depth 1 --branch b10000 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp || \
-          git clone --depth 1 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp
-          cd /tmp/llama.cpp
-
-          mkdir -p build-android && cd build-android
-          cmake .. \
-            -DCMAKE_TOOLCHAIN_FILE=$TOOLCHAIN/toolchain.cmake \
-            -DCMAKE_SYSTEM_NAME=Android \
-            -DCMAKE_SYSTEM_VERSION=26 \
-            -DANDROID_ABI=arm64-v8a \
-            -DCMAKE_ANDROID_ARCH_ABI=arm64-v8a \
-            -DCMAKE_ANDROID_NDK=$NDK \
-            -DCMAKE_ANDROID_NDK_TOOLCHAIN_VERSION=clang \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_NATIVE=OFF \
-            -DGGML_OPENMP=OFF \
-            -DGGML_CPU=ON \
-            -DLLAMA_CURL=OFF \
-            -DLLAMA_METAL=OFF \
-            -DBUILD_SHARED_LIBS=ON \
-            -DLLAMA_BUILD_TESTS=OFF \
-            -DLLAMA_BUILD_EXAMPLES=ON
-
-          make -j$(nproc) llama-server 2>&1 | tail -5
-
-          ls -la bin/
-          BIN_FILES="bin"
-          mkdir -p $GITHUB_WORKSPACE/llama-assets
-          # 压缩 llama-server 和依赖 .so 到 assets（gzip）
-          if [ -f bin/llama-server ]; then
-            gzip -9 -c bin/llama-server > $GITHUB_WORKSPACE/llama-assets/llama-server.gz
-            echo "llama-server size: $(stat -c%s $GITHUB_WORKSPACE/llama-assets/llama-server.gz)"
-          fi
-          # 收集 libggml*.so（dlopen 需要）
-          for so in bin/*.so bin/../*.so; do
-            if [ -f "$so" ]; then
-              name=$(basename "$so")
-              gzip -9 -c "$so" > "$GITHUB_WORKSPACE/llama-assets/$name.gz"
-              echo "so: $name -> $(stat -c%s $GITHUB_WORKSPACE/llama-assets/$name.gz) bytes"
-            fi
-          done
-          ls -la $GITHUB_WORKSPACE/llama-assets/
-
-      # ========== 3. 把编译好的二进制复制到 app assets ==========
-      - name: Copy llama binaries to assets
+      # ========== 2c. 收集 llama-server 和 .so 到 assets ==========
+      - name: Collect llama binaries to assets
         run: |
+          set -e
           mkdir -p app/src/main/assets
-          cp llama-assets/* app/src/main/assets/
+          FOUND_BIN=$(find /tmp/llama-unpack -name "llama-server*" -type f | head -1)
+          echo "llama-server: $FOUND_BIN"
+          if [ -z "$FOUND_BIN" ]; then
+            echo "!! 没找到 llama-server，列出全部文件："
+            find /tmp/llama-unpack -type f | head -50
+            exit 1
+          fi
+          # gzip 压缩 llama-server + 所有 .so
+          gzip -9 -c "$FOUND_BIN" > app/src/main/assets/llama-server.gz
+          echo "llama-server.gz: $(stat -c%s app/src/main/assets/llama-server.gz) bytes"
+          # 收集 .so 库
+          find /tmp/llama-unpack -name "*.so" -type f | while read so; do
+            name=$(basename "$so")
+            gzip -9 -c "$so" > "app/src/main/assets/$name.gz"
+            echo "  $name.gz: $(stat -c%s app/src/main/assets/$name.gz) bytes"
+          done
           ls -la app/src/main/assets/
 
       # ========== 4. 编译 APK ==========
