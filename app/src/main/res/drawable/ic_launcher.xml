@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 蓝色圆角背景 -->
+    <path
+        android:fillColor="#1E88E5"
+        android:pathData="M20,0 L88,0 A20,20 0 0 1 108,20 L108,88 A20,20 0 0 1 88,108 L20,108 A20,20 0 0 1 0,88 L0,20 A20,20 0 0 1 20,0 Z" />
+    <!-- AI 字样 -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M30,55 L38,28 L44,28 L52,55 L45,55 L43.5,49.5 L34.5,49.5 L33,55 Z M35.5,44 L41.5,44 L39,35.5 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M58,35 L62,28 L68,28 L64,35 Z M60,39 L66,56 L61,56 L58.5,47 L65.5,47 L67.5,56 L62.5,56 L64.5,48 L58,48 Z" />
+</vector>
