@@ -1,7 +1,6 @@
 package com.operit.qwenapp
 
 import android.content.Context
-import android.os.Process
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.atomic.AtomicBoolean
