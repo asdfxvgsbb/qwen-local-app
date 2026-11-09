@@ -42,7 +42,7 @@ class CodeRunnerTool : Tool {
     private fun runJs(code: String): String {
         val cx = org.mozilla.javascript.Context.enter()
         cx.optimizationLevel = -1
-        try {
+        return try {
             val scope = cx.initStandardObjects()
             val result = cx.evaluateString(scope, code, "code", 1, null)
             result?.toString() ?: "（无输出）"
