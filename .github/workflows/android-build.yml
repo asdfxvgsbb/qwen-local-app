@@ -78,15 +78,25 @@ jobs:
             -DGGML_CPU=ON \
             -DBUILD_SHARED_LIBS=OFF \
             -DLLAMA_BUILD_TESTS=OFF \
-            -DLLAMA_BUILD_EXAMPLES=ON \
-            -DLLAMA_BUILD_SERVER=ON
+            -DLLAMA_BUILD_EXAMPLES=OFF \
+            -DLLAMA_BUILD_SERVER=ON \
+            -DLLAMA_BUILD_UI=OFF \
+            -DLLAMA_USE_PREBUILT_UI=OFF \
+            -DLLAMA_OPENSSL=OFF
 
-          # pipefail 避免管道吞掉错误码；完整输出错误
-          set -o pipefail
-          make -j$(nproc) llama-server 2>&1 | tail -60
-          echo "make exit: ${PIPESTATUS[0]}"
+          echo "cmake 退出码: $?"
+          # 编译：重定向到日志文件，不吞退出码，只 grep 错误
+          set +e
+          make -j$(nproc) llama-server > /tmp/build.log 2>&1
+          MAKE_RC=$?
+          set -e
+          echo "make 退出码: $MAKE_RC"
+          echo "=== 错误摘要 ==="
+          grep -iE "error:|undefined reference|fatal error|Error [0-9]" /tmp/build.log | head -30
+          echo "=== 日志结尾 ==="
+          tail -15 /tmp/build.log
           echo "=== bin 目录 ==="
-          ls -la bin/
+          ls -la bin/ 2>/dev/null || find . -name "llama-server" -type f 2>/dev/null
           FILE_BIN=$(find . -name "llama-server" -type f | head -1)
           echo "llama-server binary: $FILE_BIN"
           file "$FILE_BIN"
