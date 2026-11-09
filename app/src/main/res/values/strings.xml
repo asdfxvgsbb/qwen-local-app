@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">本地千问</string>
+    <string name="start_server">启动模型</string>
+    <string name="server_running">模型运行中</string>
+    <string name="server_stopped">模型未启动</string>
+    <string name="input_hint">输入消息…</string>
+    <string name="send">发送</string>
+</resources>
