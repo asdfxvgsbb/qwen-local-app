@@ -32,6 +32,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var status: TextView
     private lateinit var btnPickModel: Button
     private lateinit var btnStart: Button
+    private lateinit var btnSettings: TextView
 
     private val messages = mutableListOf<ChatMessage>()
     private lateinit var adapter: ChatAdapter
@@ -50,6 +51,7 @@ class MainActivity : AppCompatActivity() {
         status = findViewById(R.id.serverStatus)
         btnPickModel = findViewById(R.id.btnPickModel)
         btnStart = findViewById(R.id.btnStart)
+        btnSettings = findViewById(R.id.btnSettings)
 
         recycler.layoutManager = LinearLayoutManager(this)
         adapter = ChatAdapter(messages)
@@ -61,6 +63,9 @@ class MainActivity : AppCompatActivity() {
         btnSend.setOnClickListener { send() }
         btnPickModel.setOnClickListener { pickModel() }
         btnStart.setOnClickListener { startServer() }
+        btnSettings.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
 
         // 动态申请存储权限（Android 6+ 需要，targetSdk 34 需要 MANAGE 或 READ）
         requestStoragePermission()
@@ -172,6 +177,9 @@ class MainActivity : AppCompatActivity() {
                 }
                 // 计时反馈：等待首字期间每秒刷新"思考中…(X秒)"，避免看起来像卡死
                 var waited = 0
+                // 工具调用后回答另起一条消息（避免覆盖工具卡片）
+                var isToolCard = false
+                var answerIdx = thinkingIdx
                 val ticker = kotlinx.coroutines.Job()
                 val tickJob = launch {
                     while (true) {
@@ -188,22 +196,40 @@ class MainActivity : AppCompatActivity() {
                 val reply = try {
                     client.chatStream(
                         text,
-                        onToolCall = { toolInfo ->
+                        onToolCall = { name, args, result, running ->
                             runOnUiThread {
-                                // 工具调用时先停掉计时器，显示工具信息
+                                // 工具调用时先停掉计时器，显示工具卡片
                                 tickJob.cancel()
-                                messages[thinkingIdx] = ChatMessage("assistant", toolInfo, isToolResult = true)
+                                val first = !isToolCard
+                                isToolCard = true
+                                messages[thinkingIdx] = ChatMessage(
+                                    "assistant", "",
+                                    isToolResult = true,
+                                    toolName = name,
+                                    toolArgs = args,
+                                    toolResult = result,
+                                    toolRunning = running
+                                )
                                 adapter.notifyItemChanged(thinkingIdx)
+                                if (first) {
+                                    // 首次回调：建回答占位（等工具出结果后流式填充）
+                                    answerIdx = messages.size
+                                    addMessage(ChatMessage("assistant", "思考中…"))
+                                }
                             }
                         },
                         onDelta = { delta ->
                             runOnUiThread {
                                 tickJob.cancel()
-                                val cur = messages.getOrNull(thinkingIdx)?.content.orEmpty()
+                                val cur = messages.getOrNull(answerIdx)?.content.orEmpty()
                                 // 如果还是"思考中…"占位，直接替换；否则追加
                                 val base = if (cur.startsWith("思考中")) "" else cur
-                                messages[thinkingIdx] = ChatMessage("assistant", base + delta)
-                                adapter.notifyItemChanged(thinkingIdx)
+                                if (answerIdx >= messages.size) {
+                                    addMessage(ChatMessage("assistant", delta))
+                                } else {
+                                    messages[answerIdx] = ChatMessage("assistant", base + delta)
+                                    adapter.notifyItemChanged(answerIdx)
+                                }
                                 recycler.scrollToPosition(messages.size - 1)
                             }
                         }
@@ -214,8 +240,13 @@ class MainActivity : AppCompatActivity() {
                 // 确保最终显示完整回复
                 runOnUiThread {
                     if (reply.isNotEmpty()) {
-                        messages[thinkingIdx] = ChatMessage("assistant", reply)
-                        adapter.notifyItemChanged(thinkingIdx)
+                        if (isToolCard && answerIdx < messages.size) {
+                            messages[answerIdx] = ChatMessage("assistant", reply)
+                            adapter.notifyItemChanged(answerIdx)
+                        } else {
+                            messages[thinkingIdx] = ChatMessage("assistant", reply)
+                            adapter.notifyItemChanged(thinkingIdx)
+                        }
                     }
                     recycler.scrollToPosition(messages.size - 1)
                 }

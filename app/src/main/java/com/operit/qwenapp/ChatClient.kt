@@ -25,23 +25,33 @@ class ChatClient {
         .writeTimeout(30, TimeUnit.SECONDS)
         .build()
 
-    private val SYSTEM_PROMPT =
-        "你是本地AI助手。日常问答直接回答，不要用工具。" +
-        "只有用户要求计算/天气/时间/代码/文件时才用工具。" +
-        "工具结果会返回给你，基于结果回答。"
+    private val SYSTEM_PROMPT: String
+        get() {
+            // 从设置读取自定义提示词，未设置用默认
+            val custom = SettingsActivity.getPrompt(android.app.ActivityThread.currentApplication().applicationContext)
+            return if (custom.isNotBlank()) custom else
+                "你是本地AI助手。日常问答直接回答，不要用工具。" +
+                "只有用户要求计算/天气/时间/代码/文件时才用工具。" +
+                "工具结果会返回给你，基于结果回答。"
+        }
 
-    /** 触发工具的用户消息关键词 */
-    private val TOOL_KEYWORDS = listOf(
-        "计算", "算一下", "数学", "加减乘除", "等于", "天气", "温度", "下雨", "台风",
-        "时间", "几点", "日期", "星期", "代码", "脚本", "运行", "执行", "编程",
-        "文件", "读写", "保存", "读取", "打开", "javascript", "python", "shell",
-        "终端", "命令", "ls ", "cat ", "pwd", "echo "
+    /** 关键词 → 工具名映射：按用户输入命中关键词，只带相关工具（避免9个工具全塞进prompt） */
+    private val TOOL_KEYWORDS = mapOf(
+        "calculator" to listOf("计算", "算一下", "数学", "加减乘除", "等于", "乘以", "除以"),
+        "get_weather" to listOf("天气", "下雨", "台风", "气温", "几度"),
+        "get_current_time" to listOf("时间", "几点", "日期", "星期", "现在"),
+        "run_code" to listOf("代码", "脚本", "编程", "javascript", "python", "执行代码"),
+        "file_ops" to listOf("文件", "读写", "保存", "读取", "打开", "写入"),
+        "run_terminal" to listOf("终端", "命令", "ls", "cat ", "pwd", "echo ", "shell"),
+        "device_info" to listOf("设备", "电池", "电量", "存储", "内存", "空间", "还剩", "多大"),
+        "unit_convert" to listOf("换算", "单位", "多少米", "多少公里", "多少斤", "多少克", "摄氏度", "华氏", "kb", "mb", "gb"),
+        "memorize" to listOf("记住", "记一下", "记忆", "备忘录", "别忘", "我的生日", "我叫")
     )
 
-    /** 判断用户消息是否需要工具：普通闲聊直接回答，不传 tools */
-    private fun wantsTools(userText: String): Boolean {
+    /** 根据用户消息返回需要带的工具名列表（未命中则空 = 不带工具直接聊天） */
+    private fun selectedTools(userText: String): List<String> {
         val t = userText.lowercase()
-        return TOOL_KEYWORDS.any { t.contains(it) }
+        return TOOL_KEYWORDS.filter { (_, kws) -> kws.any { t.contains(it) } }.keys.toList()
     }
 
     /** 消息历史（OpenAI 格式） */
@@ -53,20 +63,20 @@ class ChatClient {
 
     /**
      * 发送用户消息，返回模型最终回复文本
-     * onToolCall: 回调工具调用信息（用于显示"正在调用工具..."）
+     * onToolCall: 回调工具调用状态（name=工具名, args=参数, result=结果, running=是否进行中）
      */
     suspend fun chat(
         userText: String,
-        onToolCall: (String) -> Unit
+        onToolCall: (name: String, args: String, result: String, running: Boolean) -> Unit
     ): String = withContext(Dispatchers.IO) {
         history.add(JSONObject().put("role", "user").put("content", userText))
 
-        // 根据用户消息决定是否带 tools（普通闲聊不带，避免小模型乱调用）
-        var withTools = wantsTools(userText)
+        // 按关键词只带相关工具（普通闲聊不带，避免小模型乱调用 + 省上下文）
+        var toolNames = selectedTools(userText)
 
         // 工具调用循环，最多 5 轮
         for (round in 0 until 5) {
-            val body = buildBody(stream = false, withTools = withTools)
+            val body = buildBody(stream = false, toolNames = toolNames)
 
             val resp = post(body)
             val choice = resp.getJSONArray("choices").getJSONObject(0)
@@ -86,10 +96,10 @@ class ChatClient {
                     val args = fn.optString("arguments", "{}")
                     val callId = tc.optString("id", "call_$i")
 
-                    onToolCall("调用工具: $name")
+                    onToolCall(name, args, "", true)
                     // 本地执行工具
                     val result = ToolRegistry.execute(name, args)
-                    onToolCall("✅ $name → $result")
+                    onToolCall(name, args, result, false)
 
                     // 把工具结果作为 tool 消息加入历史
                     history.add(JSONObject()
@@ -103,15 +113,15 @@ class ChatClient {
                 val content = msg.optString("content", "")
                 // 兜底：带 tools 时模型可能把 JSON 当普通文本输出（小模型常见）
                 // 检测到这种"伪工具调用"就去掉 tools 重新请求，强制模型说人话
-                val looksLikeToolJson = withTools && (
+                val looksLikeToolJson = toolNames.isNotEmpty() && (
                     content.contains("{\"name\"") ||
                     content.contains("tool_calls") ||
                     (content.trimStart().startsWith("{") && content.contains("\"arguments\""))
                     )
                 if (looksLikeToolJson) {
-                    withTools = false
+                    toolNames = emptyList()
                     // 注意：此时 assistant 消息尚未加入 history（在 return 前才 add），
-                    // 所以这里只需把 withTools 置 false 重发一轮，用户消息保留
+                    // 所以这里只需把 toolNames 置空重发一轮，用户消息保留
                     continue
                 }
                 history.add(msg)
@@ -121,7 +131,7 @@ class ChatClient {
         "（工具调用超过上限，请重试）"
     }
 
-    private fun buildBody(stream: Boolean, withTools: Boolean = true): JSONObject {
+    private fun buildBody(stream: Boolean, toolNames: List<String> = emptyList()): JSONObject {
         val body = JSONObject()
             .put("model", "local-qwen")   // 模型名，服务器不校验
             .put("messages", JSONArray().apply {
@@ -130,9 +140,9 @@ class ChatClient {
             })
             .put("stream", stream)
             .put("max_tokens", 512)
-        // 只有用户消息可能用到工具时才传 tools 列表（否则小模型会乱调用）
-        if (withTools) {
-            body.put("tools", ToolRegistry.toToolsJson())
+        // 只带命中的工具（普通闲聊/未命中 = 不带，省上下文 + 避免小模型乱调用）
+        if (toolNames.isNotEmpty()) {
+            body.put("tools", ToolRegistry.toToolsJson(toolNames))
                 .put("tool_choice", "auto")
         }
         return body
@@ -145,16 +155,16 @@ class ChatClient {
      */
     suspend fun chatStream(
         userText: String,
-        onToolCall: (String) -> Unit,
+        onToolCall: (name: String, args: String, result: String, running: Boolean) -> Unit,
         onDelta: (String) -> Unit
     ): String = withContext(Dispatchers.IO) {
         history.add(JSONObject().put("role", "user").put("content", userText))
 
-        // 根据用户消息决定是否带 tools（普通闲聊不带，避免小模型乱调用）
-        var withTools = wantsTools(userText)
+        // 按关键词只带相关工具（普通闲聊不带，避免小模型乱调用 + 省上下文）
+        var toolNames = selectedTools(userText)
 
         repeat(5) { round ->
-            val body = buildBody(stream = true, withTools = withTools)
+            val body = buildBody(stream = true, toolNames = toolNames)
             val sb = StringBuilder()
             // 流式过程中收集的 tool_calls 分片（index -> 累加 JSON 字符串）
             val toolCalls = HashMap<Int, JSONObject>()
@@ -229,13 +239,13 @@ class ChatClient {
                     val name = tc.getJSONObject("function").optString("name")
                     val args = tc.getJSONObject("function").optString("arguments", "{}")
                     val callId = tc.optString("id", "call_$idx")
-                    onToolCall("调用工具: $name")
+                    onToolCall(name, args, "", true)
                     val result = try {
                         ToolRegistry.execute(name, args)
                     } catch (e: Exception) {
                         "工具执行错误: ${e.message}"
                     }
-                    onToolCall("✅ $name → ${result.take(120)}")
+                    onToolCall(name, args, result, false)
                     history.add(JSONObject()
                         .put("role", "tool")
                         .put("tool_call_id", callId)
@@ -246,7 +256,7 @@ class ChatClient {
                 // 纯文本回答结束
                 val content = sb.toString()
                 // 兜底：带 tools 时模型可能把 JSON 当普通文本输出（小模型常见）
-                val looksLikeToolJson = withTools && (
+                val looksLikeToolJson = toolNames.isNotEmpty() && (
                     content.contains("{\"name\"") ||
                     content.contains("tool_calls") ||
                     (content.trimStart().startsWith("{") && content.contains("\"arguments\""))
@@ -254,8 +264,8 @@ class ChatClient {
                 if (looksLikeToolJson) {
                     // 流式已把内容显示到界面上，这里只是决定返回什么
                     // 去掉 tools 重新请求，强制模型说人话（不带工具的轮次不再显示流式）
-                    withTools = false
-                    val retry = buildBody(stream = false, withTools = false)
+                    toolNames = emptyList()
+                    val retry = buildBody(stream = false, toolNames = emptyList())
                     val resp = post(retry)
                     val c = resp.getJSONArray("choices").getJSONObject(0)
                         .optJSONObject("message")?.optString("content", "").orEmpty()

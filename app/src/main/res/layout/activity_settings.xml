@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#F5F5F5">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="设置"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:textColor="#212121"
+            android:layout_marginBottom="16dp" />
+
+        <!-- 上下文长度 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="上下文长度（越大记忆越长，越慢）"
+            android:textSize="14sp"
+            android:textColor="#616161" />
+
+        <EditText
+            android:id="@+id/etCtx"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:hint="2048"
+            android:padding="8dp"
+            android:layout_marginBottom="12dp"
+            android:background="@android:drawable/editbox_background" />
+
+        <!-- 线程数 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="推理线程数（越大越快，越耗电）"
+            android:textSize="14sp"
+            android:textColor="#616161" />
+
+        <EditText
+            android:id="@+id/etThreads"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="number"
+            android:hint="4"
+            android:padding="8dp"
+            android:layout_marginBottom="12dp"
+            android:background="@android:drawable/editbox_background" />
+
+        <!-- 系统提示词 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="系统提示词（决定它怎么说话）"
+            android:textSize="14sp"
+            android:textColor="#616161" />
+
+        <EditText
+            android:id="@+id/etPrompt"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="textMultiLine"
+            android:minLines="4"
+            android:maxLines="8"
+            android:gravity="top"
+            android:padding="8dp"
+            android:layout_marginBottom="16dp"
+            android:background="@android:drawable/editbox_background" />
+
+        <!-- 保存按钮 -->
+        <Button
+            android:id="@+id/btnSave"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="保存设置"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp" />
+
+        <!-- 清空历史 -->
+        <Button
+            android:id="@+id/btnClearHistory"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="清空聊天历史"
+            android:textSize="16sp"
+            style="?android:attr/buttonBarButtonStyle" />
+
+        <TextView
+            android:id="@+id/tvHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="提示：上下文/线程修改后，需重启模型生效（回主界面点「停止」再「启动」）。"
+            android:textSize="12sp"
+            android:textColor="#9E9E9E"
+            android:layout_marginTop="16dp" />
+
+    </LinearLayout>
+</ScrollView>

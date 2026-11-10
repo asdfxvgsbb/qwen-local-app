@@ -14,13 +14,17 @@ object ToolRegistry {
         GetTimeTool(),
         CodeRunnerTool(),   // 【编程类工具】运行 Python / JS / Shell 代码
         FileTool(),
-        TerminalTool()      // 【内置终端】直接执行 shell 命令
+        TerminalTool(),     // 【内置终端】直接执行 shell 命令
+        DeviceInfoTool(),   // 【设备信息】电量/存储/内存
+        UnitConvertTool(),  // 【单位换算】长度/重量/温度/数据
+        MemorizeTool()      // 【记忆】记住用户偏好/备忘
     )
 
-    /** 生成传给 /v1/chat/completions 的 tools 参数 */
-    fun toToolsJson(): JSONArray {
+    /** 生成传给 /v1/chat/completions 的 tools 参数（names 为 null 时传全部） */
+    fun toToolsJson(names: List<String>? = null): JSONArray {
         val arr = JSONArray()
         for (t in tools) {
+            if (names != null && t.name !in names) continue
             val fn = JSONObject()
                 .put("name", t.name)
                 .put("description", t.description)

@@ -128,10 +128,10 @@ object LlamaServer {
             "--host", "127.0.0.1",
             "--port", PORT.toString(),
             "--n-gpu-layers", "0",
-            "--threads", "4",
-            "-c", "512",
-            "-b", "256",
-            "-ub", "256",
+            "--threads", SettingsActivity.getThreads(ctx).toString(),
+            "-c", SettingsActivity.getCtx(ctx).toString(),
+            "-b", "512",
+            "-ub", "512",
             "--no-mmap"
         )
         // 依赖库所在目录设为 LD_LIBRARY_PATH（Android 版需要 dlopen libggml 等）

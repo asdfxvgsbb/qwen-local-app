@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="#F5F5F5">
+    android:background="#121212">
 
     <!-- 顶部状态栏 -->
     <LinearLayout
@@ -12,7 +12,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:padding="12dp"
-        android:background="#FFFFFF"
+        android:background="#1E1E1E"
         android:elevation="4dp">
 
         <TextView
@@ -20,9 +20,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="本地 Agent (Qwen2.5-0.5B)"
-            android:textSize="18sp"
+            android:textSize="17sp"
             android:textStyle="bold"
-            android:textColor="#212121" />
+            android:textColor="#FFFFFF" />
 
         <TextView
             android:id="@+id/serverStatus"
@@ -32,6 +32,15 @@
             android:textSize="14sp"
             android:textColor="#9E9E9E"
             android:padding="6dp" />
+
+        <TextView
+            android:id="@+id/btnSettings"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="⚙ 设置"
+            android:textSize="14sp"
+            android:textColor="#4A90D9"
+            android:padding="8dp" />
     </LinearLayout>
 
     <!-- 聊天消息列表 -->
@@ -40,7 +49,7 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="8dp"
+        android:padding="10dp"
         android:clipToPadding="false" />
 
     <!-- 输入区 -->
@@ -50,7 +59,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:padding="8dp"
-        android:background="#FFFFFF"
+        android:background="#1E1E1E"
         android:elevation="4dp">
 
         <EditText
@@ -62,15 +71,19 @@
             android:textSize="16sp"
             android:maxLines="4"
             android:inputType="textMultiLine"
-            android:background="@android:drawable/editbox_background"
-            android:padding="8dp" />
+            android:background="@drawable/input_bg"
+            android:padding="10dp"
+            android:textColor="#E0E0E0"
+            android:textColorHint="#757575" />
 
         <Button
             android:id="@+id/btnSend"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/send"
-            android:textSize="16sp" />
+            android:textSize="16sp"
+            android:textColor="#FFFFFF"
+            android:background="@drawable/btn_send" />
     </LinearLayout>
 
     <!-- 模型操作栏 -->
@@ -80,7 +93,7 @@
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:padding="6dp"
-        android:background="#ECEFF1">
+        android:background="#252525">
 
         <Button
             android:id="@+id/btnPickModel"
@@ -88,7 +101,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="选择模型文件"
-            android:textSize="14sp"
+            android:textSize="13sp"
+            android:textColor="#B0B0B0"
+            android:background="?android:attr/selectableItemBackground"
             style="?android:attr/buttonBarButtonStyle" />
 
         <Button
@@ -97,7 +112,9 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="启动模型"
-            android:textSize="14sp"
+            android:textSize="13sp"
+            android:textColor="#B0B0B0"
+            android:background="?android:attr/selectableItemBackground"
             style="?android:attr/buttonBarButtonStyle" />
     </LinearLayout>
 
