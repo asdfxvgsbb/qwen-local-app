@@ -196,6 +196,8 @@ class MainActivity : AppCompatActivity() {
                 // 工具调用后回答另起一条消息（避免覆盖工具卡片）
                 var isToolCard = false
                 var answerIdx = thinkingIdx
+                // 当前正在执行的工具卡片位置（-1 = 尚无工具在跑），用于逐行实时显示每个工具
+                var lastToolIdx = -1
                 val ticker = kotlinx.coroutines.Job()
                 val tickJob = launch {
                     while (true) {
@@ -214,23 +216,52 @@ class MainActivity : AppCompatActivity() {
                         text,
                         onToolCall = { name, args, result, running ->
                             runOnUiThread {
-                                // 工具调用时先停掉计时器，显示工具卡片
+                                // 工具调用时先停掉计时器
                                 tickJob.cancel()
-                                val first = !isToolCard
-                                isToolCard = true
-                                messages[thinkingIdx] = ChatMessage(
-                                    "assistant", "",
-                                    isToolResult = true,
-                                    toolName = name,
-                                    toolArgs = args,
-                                    toolResult = result,
-                                    toolRunning = running
-                                )
-                                adapter.notifyItemChanged(thinkingIdx)
-                                if (first) {
-                                    // 首次回调：建回答占位（等工具出结果后流式填充）
-                                    answerIdx = messages.size
-                                    addMessage(ChatMessage("assistant", "思考中…"))
+                                if (running) {
+                                    isToolCard = true
+                                    if (answerIdx == thinkingIdx) {
+                                        // 第一个工具：把"思考中…"占位原地变成工具卡片，回答占位追加到末尾
+                                        messages[thinkingIdx] = ChatMessage(
+                                            "assistant", "",
+                                            isToolResult = true,
+                                            toolName = name,
+                                            toolArgs = args,
+                                            toolResult = "",
+                                            toolRunning = true
+                                        )
+                                        adapter.notifyItemChanged(thinkingIdx)
+                                        lastToolIdx = thinkingIdx
+                                        answerIdx = messages.size
+                                        addMessage(ChatMessage("assistant", "思考中…"))
+                                    } else {
+                                        // 后续工具：插到回答占位之前，逐行显示（不等待全部完成）
+                                        lastToolIdx = answerIdx
+                                        insertMessage(answerIdx, ChatMessage(
+                                            "assistant", "",
+                                            isToolResult = true,
+                                            toolName = name,
+                                            toolArgs = args,
+                                            toolResult = "",
+                                            toolRunning = true
+                                        ))
+                                        answerIdx++ // 回答占位后移一位
+                                    }
+                                } else {
+                                    // 该工具执行完成：把对应的"运行中"卡片就地更新为✅
+                                    val target = if (lastToolIdx in 0 until messages.size) lastToolIdx
+                                        else messages.indexOfLast { it.toolName == name && it.toolRunning }
+                                    if (target >= 0) {
+                                        messages[target] = ChatMessage(
+                                            "assistant", "",
+                                            isToolResult = true,
+                                            toolName = name,
+                                            toolArgs = args,
+                                            toolResult = result,
+                                            toolRunning = false
+                                        )
+                                        adapter.notifyItemChanged(target)
+                                    }
                                 }
                             }
                         },
@@ -277,6 +308,14 @@ class MainActivity : AppCompatActivity() {
     private fun addMessage(msg: ChatMessage) {
         messages.add(msg)
         adapter.notifyItemInserted(messages.size - 1)
+        recycler.scrollToPosition(messages.size - 1)
+    }
+
+    /** 在指定位置插入一条消息（用于工具卡片逐行插到回答占位之前） */
+    private fun insertMessage(idx: Int, msg: ChatMessage) {
+        if (idx < 0 || idx > messages.size) return
+        messages.add(idx, msg)
+        adapter.notifyItemInserted(idx)
         recycler.scrollToPosition(messages.size - 1)
     }
 }
