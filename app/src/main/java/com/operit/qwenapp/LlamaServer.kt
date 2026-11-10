@@ -73,12 +73,45 @@ object LlamaServer {
         }
     }
 
+    // ========== 模型文件选择/记忆 ==========
+    private const val PREFS = "qwen_app"
+    private const val KEY_MODEL_PATH = "model_path"
+
+    /** 获取模型文件：优先用户手动选择的，否则默认固定路径 */
+    fun getModelFile(ctx: Context): File {
+        val sp = ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val saved = sp.getString(KEY_MODEL_PATH, null)
+        if (saved != null) {
+            val f = File(saved)
+            if (f.exists() && f.length() > 100_000) return f
+        }
+        return File(MODEL_FILE)
+    }
+
+    /** 从 SAF 选择器 URI 导入模型到私有目录并记住选择（不依赖存储权限） */
+    fun importModelFromUri(ctx: Context, uri: android.net.Uri): Boolean {
+        return try {
+            val dir = File(ctx.filesDir, "models")
+            dir.mkdirs()
+            val target = File(dir, "model.gguf")
+            ctx.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(target).use { out -> input.copyTo(out) }
+            }
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putString(KEY_MODEL_PATH, target.absolutePath).apply()
+            true
+        } catch (e: Exception) {
+            android.util.Log.e("LlamaServer", "import model failed", e)
+            false
+        }
+    }
+
     /** 启动服务（阻塞直到健康检查通过或超时） */
     fun start(ctx: Context): Boolean {
         if (running.get()) return true
 
         val bin = extractBinary(ctx)
-        val model = File(MODEL_FILE)
+        val model = getModelFile(ctx)
         if (!model.exists()) return false
 
         // 老的 kill 掉
