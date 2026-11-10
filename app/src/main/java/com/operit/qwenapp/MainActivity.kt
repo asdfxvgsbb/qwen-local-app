@@ -170,16 +170,32 @@ class MainActivity : AppCompatActivity() {
                     promptStart()
                     return@launch
                 }
-                val reply = client.chat(text) { toolInfo ->
-                    // 工具调用过程更新（主线程）
-                    runOnUiThread {
-                        messages[thinkingIdx] = ChatMessage("assistant", toolInfo, isToolResult = true)
+                // 流式：逐字刷新"思考中…"气泡为真实回复
+                val reply = client.chatStream(
+                    text,
+                    onToolCall = { toolInfo ->
+                        runOnUiThread {
+                            messages[thinkingIdx] = ChatMessage("assistant", toolInfo, isToolResult = true)
+                            adapter.notifyItemChanged(thinkingIdx)
+                        }
+                    },
+                    onDelta = { delta ->
+                        runOnUiThread {
+                            val cur = messages.getOrNull(thinkingIdx)?.content.orEmpty()
+                            messages[thinkingIdx] = ChatMessage("assistant", cur + delta)
+                            adapter.notifyItemChanged(thinkingIdx)
+                            recycler.scrollToPosition(messages.size - 1)
+                        }
+                    }
+                )
+                // 确保最终显示完整回复
+                runOnUiThread {
+                    if (reply.isNotEmpty()) {
+                        messages[thinkingIdx] = ChatMessage("assistant", reply)
                         adapter.notifyItemChanged(thinkingIdx)
                     }
+                    recycler.scrollToPosition(messages.size - 1)
                 }
-                messages[thinkingIdx] = ChatMessage("assistant", reply)
-                adapter.notifyItemChanged(thinkingIdx)
-                recycler.scrollToPosition(messages.size - 1)
             } catch (e: Exception) {
                 messages[thinkingIdx] = ChatMessage("assistant", "出错: ${e.message}")
                 adapter.notifyItemChanged(thinkingIdx)
