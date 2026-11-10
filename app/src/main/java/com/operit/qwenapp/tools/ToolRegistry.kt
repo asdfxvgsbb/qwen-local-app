@@ -13,7 +13,8 @@ object ToolRegistry {
         WeatherTool(),
         GetTimeTool(),
         CodeRunnerTool(),   // 【编程类工具】运行 Python / JS / Shell 代码
-        FileTool()
+        FileTool(),
+        TerminalTool()      // 【内置终端】直接执行 shell 命令
     )
 
     /** 生成传给 /v1/chat/completions 的 tools 参数 */
