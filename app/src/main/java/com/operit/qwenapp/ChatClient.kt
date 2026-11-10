@@ -26,8 +26,9 @@ class ChatClient {
         .build()
 
     private val SYSTEM_PROMPT =
-        "你是运行在手机上的本地AI助手，基于Qwen2.5。你可以调用工具来完成任务。" +
-        "如果用户需要计算、查天气、查时间、执行代码或读写文件，请调用对应工具。" +
+        "你是运行在手机上的本地AI助手，基于Qwen2.5。" +
+        "日常问候、闲聊、普通问答请直接回答，不要调用工具。" +
+        "只有当用户明确要求计算、查天气、查时间、执行代码、读写文件时，才调用对应工具。" +
         "工具调用结果会以 tool 消息返回给你，请基于结果组织最终回答。"
 
     /** 消息历史（OpenAI 格式） */
@@ -143,7 +144,8 @@ class ChatClient {
                             val delta = json.optJSONArray("choices")?.optJSONObject(0)?.optJSONObject("delta")
                                 ?: continue
                             val finish = json.optJSONArray("choices")?.optJSONObject(0)?.optString("finish_reason").orEmpty()
-                            val content = delta.optString("content", "")
+                            // 注意：org.json 的 optString 对 JSON null 会返回字符串 "null"，必须显式判断
+                            val content = if (delta.isNull("content")) "" else delta.optString("content", "")
                             if (content.isNotEmpty()) {
                                 sb.append(content)
                                 onDelta(content)
