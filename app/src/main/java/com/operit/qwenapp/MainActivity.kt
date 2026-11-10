@@ -152,11 +152,6 @@ class MainActivity : AppCompatActivity() {
     private fun send() {
         val text = input.text.toString().trim()
         if (text.isEmpty()) return
-        if (!LlamaServer.isHealthy()) {
-            Toast.makeText(this, "模型未运行，请先启动", Toast.LENGTH_SHORT).show()
-            promptStart()
-            return
-        }
         input.setText("")
         addMessage(ChatMessage("user", text))
 
@@ -166,6 +161,15 @@ class MainActivity : AppCompatActivity() {
 
         CoroutineScope(Dispatchers.Main).launch {
             try {
+                // 健康检查必须在 IO 线程（主线程禁止网络请求，否则抛 NetworkOnMainThreadException）
+                val healthy = withContext(Dispatchers.IO) { LlamaServer.isHealthy() }
+                if (!healthy) {
+                    messages[thinkingIdx] = ChatMessage("assistant", "⚠️ 模型未运行，请先点「启动模型」")
+                    adapter.notifyItemChanged(thinkingIdx)
+                    Toast.makeText(this@MainActivity, "模型未运行，请先启动", Toast.LENGTH_SHORT).show()
+                    promptStart()
+                    return@launch
+                }
                 val reply = client.chat(text) { toolInfo ->
                     // 工具调用过程更新（主线程）
                     runOnUiThread {
