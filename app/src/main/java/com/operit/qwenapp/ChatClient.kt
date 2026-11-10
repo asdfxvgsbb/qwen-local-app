@@ -34,7 +34,8 @@ class ChatClient {
     private val TOOL_KEYWORDS = listOf(
         "计算", "算一下", "数学", "加减乘除", "等于", "天气", "温度", "下雨", "台风",
         "时间", "几点", "日期", "星期", "代码", "脚本", "运行", "执行", "编程",
-        "文件", "读写", "保存", "读取", "打开", "javascript", "python", "shell"
+        "文件", "读写", "保存", "读取", "打开", "javascript", "python", "shell",
+        "终端", "命令", "ls ", "cat ", "pwd", "echo "
     )
 
     /** 判断用户消息是否需要工具：普通闲聊直接回答，不传 tools */
