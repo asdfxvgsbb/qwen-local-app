@@ -88,6 +88,11 @@ object LlamaServer {
         return File(MODEL_FILE)
     }
 
+    /** 当前模型显示名（文件名，无路径），用于界面标题；任何 .gguf 都能显示 */
+    fun getModelName(ctx: Context): String {
+        return getModelFile(ctx).name
+    }
+
     /** 从 SAF 选择器 URI 导入模型到私有目录并记住选择（不依赖存储权限） */
     fun importModelFromUri(ctx: Context, uri: android.net.Uri): Boolean {
         return try {

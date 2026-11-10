@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var btnPickModel: Button
     private lateinit var btnStart: Button
     private lateinit var btnSettings: TextView
+    private lateinit var tvTitle: TextView
 
     private val messages = mutableListOf<ChatMessage>()
     private lateinit var adapter: ChatAdapter
@@ -53,9 +54,13 @@ class MainActivity : AppCompatActivity() {
         btnPickModel = findViewById(R.id.btnPickModel)
         btnStart = findViewById(R.id.btnStart)
         btnSettings = findViewById(R.id.btnSettings)
+        tvTitle = findViewById(R.id.tvTitle)
 
         // 注入 Application Context 给工具（device_info/memorize 等需要）
         ToolRegistry.init(applicationContext)
+
+        // 标题显示当前模型名（适配任意 .gguf 模型）
+        refreshTitle()
 
         recycler.layoutManager = LinearLayoutManager(this)
         adapter = ChatAdapter(messages)
@@ -88,7 +93,7 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** 打开系统文件选择器选 .gguf 模型 */
+    /** 打开系统文件选择器选 .gguf 模型（任何模型都可导入） */
     private fun pickModel() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
@@ -96,6 +101,12 @@ class MainActivity : AppCompatActivity() {
             putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "*/*"))
         }
         startActivityForResult(intent, REQ_PICK_MODEL)
+    }
+
+    /** 刷新顶部标题：显示当前模型文件名（切换模型后调用） */
+    private fun refreshTitle() {
+        val name = LlamaServer.getModelName(this)
+        tvTitle.text = "本地 Agent（$name）"
     }
 
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -108,6 +119,7 @@ class MainActivity : AppCompatActivity() {
                 if (ok) {
                     status.text = "模型已导入，可启动"
                     Toast.makeText(this@MainActivity, "模型导入成功 ✅", Toast.LENGTH_LONG).show()
+                    refreshTitle()
                 } else {
                     status.text = getString(R.string.server_stopped)
                     Toast.makeText(this@MainActivity, "导入失败", Toast.LENGTH_LONG).show()

@@ -16,13 +16,16 @@
         android:elevation="4dp">
 
         <TextView
+            android:id="@+id/tvTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="本地 Agent (Qwen2.5-0.5B)"
+            android:text="本地 Agent"
             android:textSize="17sp"
             android:textStyle="bold"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFFFFF"
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <TextView
             android:id="@+id/serverStatus"
