@@ -52,7 +52,11 @@ class ChatClient {
             "device_info" to "设备信息",
             "unit_convert" to "单位换算",
             "memorize" to "记忆",
-            "launch_app" to "打开应用"
+            "launch_app" to "打开应用",
+            "set_reminder" to "提醒闹钟",
+            "clipboard" to "剪贴板",
+            "open_website" to "打开网页",
+            "random" to "随机"
         )
         val sb = StringBuilder()
         var first = true
@@ -78,13 +82,22 @@ class ChatClient {
         "device_info" to listOf("设备信息", "电池", "电量", "内存多大", "存储多大", "手机配置", "还剩多少空间", "运行内存"),
         "unit_convert" to listOf("换算", "单位换算", "多少米", "多少公里", "多少斤", "多少克", "摄氏度", "华氏", "kb", "mb", "gb"),
         "memorize" to listOf("记住", "记一下", "记忆", "备忘录", "别忘", "记住我叫", "记住我的", "我的生日", "帮我记"),
-        "launch_app" to listOf("打开", "启动", "开启", "帮我打开", "打开一下", "安装的")
+        "launch_app" to listOf("打开", "启动", "开启", "帮我打开", "打开一下", "安装的"),
+        "set_reminder" to listOf("提醒我", "提醒一下", "闹钟", "倒计时", "分钟后提醒", "秒后提醒", "小时后提醒", "待办提醒"),
+        "clipboard" to listOf("剪贴板", "复制到", "粘贴出来", "复制这个", "帮我复制", "复制网址"),
+        "open_website" to listOf("打开网页", "打开网站", "用浏览器", "上网搜", "浏览网页", "打开百度", "打开淘宝", "打开微博", "打开b站", "打开bilibili", "打开知乎"),
+        "random" to listOf("随机数", "随机选", "帮我选一个", "随机数字", "摇一摇", "抽一个", "抽签", "掷骰子")
     )
 
     /** 根据用户消息返回需要带的工具名列表（未命中则空 = 不带工具直接聊天） */
     private fun selectedTools(userText: String): List<String> {
         val t = userText.lowercase()
-        return TOOL_KEYWORDS.filter { (_, kws) -> kws.any { t.contains(it) } }.keys.toList()
+        var list = TOOL_KEYWORDS.filter { (_, kws) -> kws.any { t.contains(it) } }.keys.toList()
+        // 优先级：命中 open_website（打开百度/淘宝/b站等）时，去掉 launch_app 的宽泛"打开"命中，避免同时开App又开网页
+        if ("open_website" in list && "launch_app" in list) {
+            list = list.filter { it != "launch_app" }
+        }
+        return list
     }
 
     /**
@@ -118,7 +131,54 @@ class ChatClient {
                 t = t.removeSuffix("一下").removeSuffix("吧").removeSuffix("啊").trim()
                 if (t.isEmpty() || t.length > 12) null else JSONObject().put("name", t)
             }
-            // run_code / file_ops / run_terminal / unit_convert / memorize 参数复杂，不强行调用
+            "set_reminder" -> {
+                // 提取延迟秒数："X分钟/秒/小时后"
+                val m = Regex("(\\d+)\\s*(秒|分钟|小时)后").find(userText)
+                if (m == null) {
+                    // 没有明确时间，默认 10 分钟
+                    val msg = userText.replace(Regex("提醒我|提醒一下|帮我|设置|闹钟|倒计时"), "").trim('。', '！', '？', ' ')
+                    if (msg.isEmpty()) null else JSONObject().put("delay_seconds", 600).put("message", msg)
+                } else {
+                    val num = m.groupValues[1].toLong()
+                    val unit = m.groupValues[2]
+                    val sec = when (unit) {
+                        "秒" -> num
+                        "分钟" -> num * 60
+                        "小时" -> num * 3600
+                        else -> num
+                    }
+                    val msg = userText.replace(m.value, "").replace(Regex("提醒我|提醒一下|帮我|设置|闹钟|倒计时"), "").trim('。', '！', '？', ' ')
+                    JSONObject().put("delay_seconds", sec).put("message", msg.ifEmpty { "提醒" })
+                }
+            }
+            "open_website" -> {
+                // "打开百度" → https://www.baidu.com；"打开b站" → bilibili
+                val known = mapOf(
+                    "百度" to "www.baidu.com", "淘宝" to "www.taobao.com", "微博" to "weibo.com",
+                    "b站" to "www.bilibili.com", "bilibili" to "www.bilibili.com", "知乎" to "www.zhihu.com",
+                    "京东" to "www.jd.com", "抖音" to "www.douyin.com", "微信" to "weixin.qq.com",
+                    "腾讯" to "www.tencent.com", "阿里巴巴" to "www.alibaba.com", "网易" to "www.163.com"
+                )
+                val hit = known.entries.firstOrNull { (k, _) -> userText.contains(k) }
+                if (hit != null) JSONObject().put("url", hit.value)
+                else null // 其余情况交给模型带 url
+            }
+            "random" -> {
+                // "1到100随机数" 或 "帮我选一个：A/B/C"
+                val m = Regex("(\\d+)\\s*到\\s*(\\d+)").find(userText)
+                if (m != null) {
+                    JSONObject().put("type", "number").put("min", m.groupValues[1].toInt()).put("max", m.groupValues[2].toInt())
+                } else {
+                    // 检查选项：用 / 或 、 或 ， 分隔
+                    val opts = userText.split(Regex("[/、，,]")).map { it.trim().removePrefix("帮我选一个").removePrefix("帮我选").removeSuffix("吧") }.filter { it.isNotBlank() && it.length <= 6 }
+                    if (opts.size >= 2) {
+                        val arr = org.json.JSONArray()
+                        opts.forEach { arr.put(it) }
+                        JSONObject().put("type", "choice").put("options", arr)
+                    } else null
+                }
+            }
+            // run_code / file_ops / run_terminal / unit_convert / memorize / clipboard 参数复杂，不强行调用
             else -> null
         }
     }
