@@ -3,10 +3,10 @@ package com.operit.qwenapp.tools
 import org.json.JSONObject
 import java.io.File
 
-/** 文件工具：读写文本文件（限定在 /sdcard/ai 下，安全） */
+/** 文件工具：读写文本文件（限定在可配置的工作区内，默认 /sdcard/ai，安全） */
 class FileTool : Tool {
     override val name = "file_ops"
-    override val description = "读写文本文件。action = read|write，path = 文件路径（需在 /sdcard/ai 下），content = 写入内容（write 时）"
+    override val description = "读写文本文件。action = read|write，path = 文件路径（需在工作区目录下），content = 写入内容（write 时）"
 
     override val parametersSchema: JSONObject = JSONObject()
         .put("type", "object")
@@ -16,11 +16,18 @@ class FileTool : Tool {
             .put("content", JSONObject().put("type", "string").put("description", "写入内容")))
         .put("required", org.json.JSONArray().put("action").put("path"))
 
+    /** 当前工作区：可在设置里修改，默认 /sdcard/ai */
+    private fun workspace(): String {
+        val ctx = ToolRegistry.appContext
+        return ctx?.let { com.operit.qwenapp.SettingsActivity.getWorkspace(it) } ?: "/sdcard/ai"
+    }
+
     override fun execute(args: JSONObject): String {
         val action = args.optString("action", "read")
         val path = args.optString("path", "")
+        val ws = workspace()
         if (path.isBlank()) return "错误：缺少 path 参数"
-        if (!path.startsWith("/sdcard/ai")) return "错误：路径必须在 /sdcard/ai 下"
+        if (path != ws && !path.startsWith(ws + "/")) return "错误：路径必须在工作区 $ws 下"
         return try {
             when (action) {
                 "read" -> {
