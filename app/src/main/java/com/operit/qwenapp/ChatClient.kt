@@ -51,7 +51,8 @@ class ChatClient {
             "run_terminal" to "终端命令",
             "device_info" to "设备信息",
             "unit_convert" to "单位换算",
-            "memorize" to "记忆"
+            "memorize" to "记忆",
+            "launch_app" to "打开应用"
         )
         val sb = StringBuilder()
         var first = true
@@ -65,16 +66,19 @@ class ChatClient {
     }
 
     /** 关键词 → 工具名映射：按用户输入命中关键词，只带相关工具（避免9个工具全塞进prompt） */
+    /** 关键词 → 工具名映射：按用户输入命中关键词，只带相关工具（避免9个工具全塞进prompt）
+ * 注意：尽量用“长短语/精准词”，避免“现在/多大/打开/等于/我叫”这类高频口语词，防止普通聊天误触发工具 */
     private val TOOL_KEYWORDS = mapOf(
-        "calculator" to listOf("计算", "算一下", "数学", "加减乘除", "等于", "乘以", "除以"),
-        "get_weather" to listOf("天气", "下雨", "台风", "气温", "几度"),
-        "get_current_time" to listOf("时间", "几点", "日期", "星期", "现在"),
-        "run_code" to listOf("代码", "脚本", "编程", "javascript", "python", "执行代码"),
-        "file_ops" to listOf("文件", "读写", "保存", "读取", "打开", "写入"),
-        "run_terminal" to listOf("终端", "命令", "ls", "cat ", "pwd", "echo ", "shell"),
-        "device_info" to listOf("设备", "电池", "电量", "存储", "内存", "空间", "还剩", "多大"),
-        "unit_convert" to listOf("换算", "单位", "多少米", "多少公里", "多少斤", "多少克", "摄氏度", "华氏", "kb", "mb", "gb"),
-        "memorize" to listOf("记住", "记一下", "记忆", "备忘录", "别忘", "我的生日", "我叫")
+        "calculator" to listOf("计算", "算一下", "数学", "加减乘除", "乘以", "除以", "等于多少", "等于几", "算一算", "帮我算"),
+        "get_weather" to listOf("天气", "下雨", "台风", "气温", "几度", "温度", "天气怎么样"),
+        "get_current_time" to listOf("时间", "几点", "日期", "星期", "几点了", "几点钟", "现在几点", "现在时间", "现在日期", "今天几号", "今天星期"),
+        "run_code" to listOf("代码", "脚本", "编程", "javascript", "python", "执行代码", "写个程序", "跑一下"),
+        "file_ops" to listOf("文件", "读写", "保存", "读取", "写入", "读文件", "写文件", "创建文件"),
+        "run_terminal" to listOf("终端", "命令", "ls ", "cat ", "pwd", "echo ", "shell", "执行命令"),
+        "device_info" to listOf("设备信息", "电池", "电量", "内存多大", "存储多大", "手机配置", "还剩多少空间", "运行内存"),
+        "unit_convert" to listOf("换算", "单位换算", "多少米", "多少公里", "多少斤", "多少克", "摄氏度", "华氏", "kb", "mb", "gb"),
+        "memorize" to listOf("记住", "记一下", "记忆", "备忘录", "别忘", "记住我叫", "记住我的", "我的生日", "帮我记"),
+        "launch_app" to listOf("打开", "启动", "开启", "帮我打开", "打开一下", "安装的")
     )
 
     /** 根据用户消息返回需要带的工具名列表（未命中则空 = 不带工具直接聊天） */
@@ -102,6 +106,17 @@ class ChatClient {
                 val m = Regex("([\\u4e00-\\u9fa5A-Za-z]{1,6})[的]?天气").find(userText)
                 val city = m?.groupValues?.get(1)
                 if (city.isNullOrEmpty()) null else JSONObject().put("city", city)
+            }
+            "launch_app" -> {
+                // 提取应用名：去掉"帮我打开/打开/启动"等前缀，取剩余部分
+                var t = userText
+                val pre = listOf("帮我打开一下", "帮我打开", "打开一下", "开启一下", "帮我启动", "请打开", "打开", "启动", "开启", "帮我开")
+                    .firstOrNull { t.contains(it) }
+                if (pre != null) t = t.substringAfter(pre).trim()
+                t = t.trim('。', '！', '？', '，', '？', ' ', '.', '!', '?')
+                // 去掉常见的客套词尾巴
+                t = t.removeSuffix("一下").removeSuffix("吧").removeSuffix("啊").trim()
+                if (t.isEmpty() || t.length > 12) null else JSONObject().put("name", t)
             }
             // run_code / file_ops / run_terminal / unit_convert / memorize 参数复杂，不强行调用
             else -> null
