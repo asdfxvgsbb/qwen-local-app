@@ -15,8 +15,8 @@ object LlamaServer {
 
     private const val PORT = 8080
     private const val BIN_NAME = "llama-server"
-    private const val MODEL_DIR = "/sdcard/ai/qwen25-1.5b-tools"
-    const val MODEL_FILE = "$MODEL_DIR/Qwen2.5-1.5B-tools-Q5_K_M.gguf"
+    private const val MODEL_DIR = "/sdcard/ai/qwen25-0.5b-tools"
+    const val MODEL_FILE = "$MODEL_DIR/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
     const val BASE_URL = "http://127.0.0.1:$PORT/v1"
 
     private var process: Process? = null
@@ -128,10 +128,10 @@ object LlamaServer {
             "--host", "127.0.0.1",
             "--port", PORT.toString(),
             "--n-gpu-layers", "0",
-            "--threads", "6",
-            "-c", "1024",
-            "-b", "1024",
-            "-ub", "1024",
+            "--threads", "4",
+            "-c", "512",
+            "-b", "256",
+            "-ub", "256",
             "--no-mmap"
         )
         // 依赖库所在目录设为 LD_LIBRARY_PATH（Android 版需要 dlopen libggml 等）
