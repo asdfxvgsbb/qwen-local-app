@@ -31,6 +31,19 @@ class ChatClient {
         "只有当用户明确要求计算、查天气、查时间、执行代码、读写文件时，才调用对应工具。" +
         "工具调用结果会以 tool 消息返回给你，请基于结果组织最终回答。"
 
+    /** 触发工具的用户消息关键词 */
+    private val TOOL_KEYWORDS = listOf(
+        "计算", "算一下", "数学", "加减乘除", "等于", "天气", "温度", "下雨", "台风",
+        "时间", "几点", "日期", "星期", "代码", "脚本", "运行", "执行", "编程",
+        "文件", "读写", "保存", "读取", "打开", "javascript", "python", "shell"
+    )
+
+    /** 判断用户消息是否需要工具：普通闲聊直接回答，不传 tools */
+    private fun wantsTools(userText: String): Boolean {
+        val t = userText.lowercase()
+        return TOOL_KEYWORDS.any { t.contains(it) }
+    }
+
     /** 消息历史（OpenAI 格式） */
     private val history = mutableListOf<JSONObject>()
 
@@ -48,9 +61,12 @@ class ChatClient {
     ): String = withContext(Dispatchers.IO) {
         history.add(JSONObject().put("role", "user").put("content", userText))
 
+        // 根据用户消息决定是否带 tools（普通闲聊不带，避免小模型乱调用）
+        var withTools = wantsTools(userText)
+
         // 工具调用循环，最多 5 轮
         repeat(5) { round ->
-            val body = buildBody(stream = false)
+            val body = buildBody(stream = false, withTools = withTools)
 
             val resp = post(body)
             val choice = resp.getJSONArray("choices").getJSONObject(0)
@@ -85,6 +101,19 @@ class ChatClient {
             } else {
                 // 正常文本回答
                 val content = msg.optString("content", "")
+                // 兜底：带 tools 时模型可能把 JSON 当普通文本输出（小模型常见）
+                // 检测到这种"伪工具调用"就去掉 tools 重新请求，强制模型说人话
+                val looksLikeToolJson = withTools && (
+                    content.contains("{\"name\"") ||
+                    content.contains("tool_calls") ||
+                    (content.trimStart().startsWith("{") && content.contains("\"arguments\""))
+                    )
+                if (looksLikeToolJson) {
+                    withTools = false
+                    // 注意：此时 assistant 消息尚未加入 history（在 return 前才 add），
+                    // 所以这里只需把 withTools 置 false 重发一轮，用户消息保留
+                    continue
+                }
                 history.add(msg)
                 return@withContext content
             }
@@ -92,17 +121,21 @@ class ChatClient {
         "（工具调用超过上限，请重试）"
     }
 
-    private fun buildBody(stream: Boolean): JSONObject {
-        return JSONObject()
+    private fun buildBody(stream: Boolean, withTools: Boolean = true): JSONObject {
+        val body = JSONObject()
             .put("model", "local-qwen")   // 模型名，服务器不校验
             .put("messages", JSONArray().apply {
                 put(JSONObject().put("role", "system").put("content", SYSTEM_PROMPT))
                 history.forEach { put(it) }
             })
-            .put("tools", ToolRegistry.toToolsJson())
-            .put("tool_choice", "auto")
             .put("stream", stream)
             .put("max_tokens", 512)
+        // 只有用户消息可能用到工具时才传 tools 列表（否则小模型会乱调用）
+        if (withTools) {
+            body.put("tools", ToolRegistry.toToolsJson())
+                .put("tool_choice", "auto")
+        }
+        return body
     }
 
     /**
@@ -117,8 +150,11 @@ class ChatClient {
     ): String = withContext(Dispatchers.IO) {
         history.add(JSONObject().put("role", "user").put("content", userText))
 
+        // 根据用户消息决定是否带 tools（普通闲聊不带，避免小模型乱调用）
+        var withTools = wantsTools(userText)
+
         repeat(5) { round ->
-            val body = buildBody(stream = true)
+            val body = buildBody(stream = true, withTools = withTools)
             val sb = StringBuilder()
             // 流式过程中收集的 tool_calls 分片（index -> 累加 JSON 字符串）
             val toolCalls = HashMap<Int, JSONObject>()
@@ -209,6 +245,23 @@ class ChatClient {
             } else {
                 // 纯文本回答结束
                 val content = sb.toString()
+                // 兜底：带 tools 时模型可能把 JSON 当普通文本输出（小模型常见）
+                val looksLikeToolJson = withTools && (
+                    content.contains("{\"name\"") ||
+                    content.contains("tool_calls") ||
+                    (content.trimStart().startsWith("{") && content.contains("\"arguments\""))
+                    )
+                if (looksLikeToolJson) {
+                    // 流式已把内容显示到界面上，这里只是决定返回什么
+                    // 去掉 tools 重新请求，强制模型说人话（不带工具的轮次不再显示流式）
+                    withTools = false
+                    val retry = buildBody(stream = false, withTools = false)
+                    val resp = post(retry)
+                    val c = resp.getJSONArray("choices").getJSONObject(0)
+                        .optJSONObject("message")?.optString("content", "").orEmpty()
+                    history.add(JSONObject().put("role", "assistant").put("content", c))
+                    return@withContext c
+                }
                 history.add(JSONObject().put("role", "assistant").put("content", content))
                 return@withContext content
             }
