@@ -75,6 +75,24 @@
             android:layout_marginBottom="16dp"
             android:background="@android:drawable/editbox_background" />
 
+        <!-- 工作区 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="工作区（文件工具允许操作的目录）"
+            android:textSize="14sp"
+            android:textColor="#616161" />
+
+        <EditText
+            android:id="@+id/etWorkspace"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:hint="/sdcard/ai"
+            android:padding="8dp"
+            android:layout_marginBottom="16dp"
+            android:background="@android:drawable/editbox_background" />
+
         <!-- 保存按钮 -->
         <Button
             android:id="@+id/btnSave"
