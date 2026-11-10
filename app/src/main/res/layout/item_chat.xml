@@ -14,6 +14,7 @@
         android:orientation="vertical"
         android:padding="8dp"
         android:background="@drawable/bg_bubble_tool"
+        android:layout_gravity="start"
         android:visibility="gone">
 
         <TextView

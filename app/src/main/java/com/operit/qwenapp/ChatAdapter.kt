@@ -67,19 +67,25 @@ class ChatAdapter(private val items: MutableList<ChatMessage>) :
         holder.toolCard.visibility = View.GONE
         holder.bubble.visibility = View.VISIBLE
         holder.bubble.text = msg.content
-        val lp = holder.bubble.layoutParams as ViewGroup.MarginLayoutParams
+        val lp = holder.bubble.layoutParams as LinearLayout.LayoutParams
 
         if (msg.role == "user") {
-            // 用户消息：右对齐
+            // 用户消息：整体贴右
             holder.bubble.setBackgroundResource(R.drawable.bg_bubble_user)
-            lp.marginStart = dp(holder, 80)
+            lp.gravity = android.view.Gravity.END
+            lp.marginStart = dp(holder, 60)
             lp.marginEnd = dp(holder, 8)
-            holder.bubble.gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+            lp.topMargin = dp(holder, 2)
+            lp.bottomMargin = dp(holder, 2)
+            holder.bubble.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
         } else {
-            // AI消息：左对齐
+            // AI消息：整体贴左
             holder.bubble.setBackgroundResource(R.drawable.bg_bubble_ai)
+            lp.gravity = android.view.Gravity.START
             lp.marginStart = dp(holder, 8)
-            lp.marginEnd = dp(holder, 80)
+            lp.marginEnd = dp(holder, 60)
+            lp.topMargin = dp(holder, 2)
+            lp.bottomMargin = dp(holder, 2)
             holder.bubble.gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
         }
         holder.bubble.layoutParams = lp
