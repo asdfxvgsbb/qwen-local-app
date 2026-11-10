@@ -213,16 +213,14 @@ class ChatClient {
                     content.contains("tool_calls") ||
                     (content.trimStart().startsWith("{") && content.contains("\"arguments\""))
                     )
-                if (looksLikeToolJson) {
+                // 强制工具适配：先真执行命中的工具（模型没调工具能力时也执行）
+                // forceRunTools 内部已加入 assistant(带tool_calls)+tool 消息，这里不要再 add
+                // 顺序在前：模型把工具调用当文本输出时，先真正执行工具
+                if (toolNames.isNotEmpty() && forceRunTools(toolNames, userText, onToolCall)) {
                     toolNames = emptyList()
-                    // 注意：此时 assistant 消息尚未加入 history（在 return 前才 add），
-                    // 所以这里只需把 toolNames 置空重发一轮，用户消息保留
                     continue
                 }
-                // 强制工具适配：模型没能力调工具时，由 App 层直接执行命中的工具，
-                // 把真实结果喂回，再让模型基于结果总结（适配任何无 tool calling 能力的模型）
-                // 注意：forceRunTools 内部已加入 assistant(带tool_calls)+tool 消息，这里不要再 add
-                if (toolNames.isNotEmpty() && forceRunTools(toolNames, userText, onToolCall)) {
+                if (looksLikeToolJson) {
                     toolNames = emptyList()
                     continue
                 }
@@ -268,6 +266,7 @@ class ChatClient {
         for (round in 0 until 5) {
             val body = buildBody(stream = true, toolNames = toolNames)
             val sb = StringBuilder()
+            var suspicious = false
             // 流式过程中收集的 tool_calls 分片（index -> 累加 JSON 字符串）
             val toolCalls = HashMap<Int, JSONObject>()
             val toolOrder = ArrayList<Int>()
@@ -295,8 +294,14 @@ class ChatClient {
                             // 注意：org.json 的 optString 对 JSON null 会返回字符串 "null"，必须显式判断
                             val content = if (delta.isNull("content")) "" else delta.optString("content", "")
                             if (content.isNotEmpty()) {
-                                sb.append(content)
-                                onDelta(content)
+                                if (!suspicious && (content.contains("<tool_call") || content.contains("{\"name\"")
+                                        || content.contains("\"arguments\"") || content.contains("tool_calls"))) {
+                                    suspicious = true
+                                }
+                                if (!suspicious) {
+                                    sb.append(content)
+                                    onDelta(content)
+                                }
                             }
                             val tc = delta.optJSONArray("tool_calls")
                             if (tc != null) {
@@ -363,6 +368,13 @@ class ChatClient {
                     content.contains("tool_calls") ||
                     (content.trimStart().startsWith("{") && content.contains("\"arguments\""))
                     )
+                // 强制工具适配：先真执行命中的工具（模型没调工具能力时也执行）
+                // forceRunTools 内部已加入 assistant(带tool_calls)+tool 消息，这里不要再 add
+                // 顺序在前：模型把工具调用当文本输出时，先真正执行工具
+                if (toolNames.isNotEmpty() && forceRunTools(toolNames, userText, onToolCall)) {
+                    toolNames = emptyList()
+                    continue
+                }
                 if (looksLikeToolJson) {
                     // 流式已把内容显示到界面上，这里只是决定返回什么
                     // 去掉 tools 重新请求，强制模型说人话（不带工具的轮次不再显示流式）
@@ -373,12 +385,6 @@ class ChatClient {
                         .optJSONObject("message")?.optString("content", "").orEmpty()
                     history.add(JSONObject().put("role", "assistant").put("content", c))
                     return@withContext c
-                }
-                // 强制工具适配：模型没调工具时，由 App 层直接执行命中的工具并喂回
-                // forceRunTools 内部已加入 assistant(带tool_calls)+tool 消息，这里不要再 add
-                if (toolNames.isNotEmpty() && forceRunTools(toolNames, userText, onToolCall)) {
-                    toolNames = emptyList()
-                    continue
                 }
                 history.add(JSONObject().put("role", "assistant").put("content", content))
                 return@withContext content
