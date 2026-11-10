@@ -109,6 +109,11 @@ object LlamaServer {
     /** 启动服务（阻塞直到健康检查通过或超时） */
     fun start(ctx: Context): Boolean {
         if (running.get()) return true
+        // 端口已有服务则直接复用（可能是外部/旧进程）
+        if (isHealthy()) {
+            running.set(true)
+            return true
+        }
 
         val bin = extractBinary(ctx)
         val model = getModelFile(ctx)
