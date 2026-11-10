@@ -27,7 +27,11 @@ object ToolRegistry {
         DeviceInfoTool(),   // 【设备信息】电量/存储/内存
         UnitConvertTool(),  // 【单位换算】长度/重量/温度/数据
         MemorizeTool(),     // 【记忆】记住用户偏好/备忘
-        LaunchAppTool()     // 【打开应用】根据名称匹配并启动已安装应用
+        LaunchAppTool(),    // 【打开应用】根据名称匹配并启动已安装应用
+        SetReminderTool(),  // 【提醒】倒计时/闹钟提醒
+        ClipboardTool(),    // 【剪贴板】读写系统剪贴板
+        OpenWebsiteTool(),  // 【打开网页】浏览器打开网址
+        RandomTool()        // 【随机】随机数/随机选项
     )
 
     /** 生成传给 /v1/chat/completions 的 tools 参数（names 为 null 时传全部） */
