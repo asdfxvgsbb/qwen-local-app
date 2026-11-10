@@ -83,15 +83,30 @@
             android:textSize="14sp"
             android:textColor="#616161" />
 
-        <EditText
-            android:id="@+id/etWorkspace"
+        <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:inputType="text"
-            android:hint="/sdcard/ai"
-            android:padding="8dp"
-            android:layout_marginBottom="16dp"
-            android:background="@android:drawable/editbox_background" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+
+            <EditText
+                android:id="@+id/etWorkspace"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:inputType="text"
+                android:hint="/sdcard/ai"
+                android:padding="8dp"
+                android:background="@android:drawable/editbox_background" />
+
+            <Button
+                android:id="@+id/btnPickWorkspace"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="选择"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
 
         <!-- 保存按钮 -->
         <Button
