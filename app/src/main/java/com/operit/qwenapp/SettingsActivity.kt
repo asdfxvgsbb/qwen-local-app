@@ -1,7 +1,10 @@
 package com.operit.qwenapp
 
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.DocumentsContract
 import android.widget.Button
 import android.widget.EditText
 import android.widget.Toast
@@ -31,6 +34,28 @@ class SettingsActivity : AppCompatActivity() {
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_WORKSPACE, DEFAULT_WORKSPACE) ?: DEFAULT_WORKSPACE
     }
 
+    private val REQ_PICK_DIR = 3001
+
+    private lateinit var etWorkspace: EditText
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK_DIR && resultCode == RESULT_OK && data?.data != null) {
+            val uri: Uri = data.data!!
+            // 尝试用 DocumentsContract 拿真实路径；拿不到就显示 URI（SAF 目录）
+            val path = runCatching {
+                val docId = DocumentsContract.getTreeDocumentId(uri)
+                val split = docId.split(":")
+                if (split.size > 1) {
+                    // primary:xxx -> /storage/emulated/0/xxx
+                    if (split[0] == "primary") "/storage/emulated/0/${split[1]}"
+                    else "/storage/emulated/0/${split[1]}"
+                } else docId
+            }.getOrDefault(uri.toString())
+            etWorkspace.setText(path)
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_settings)
@@ -38,7 +63,8 @@ class SettingsActivity : AppCompatActivity() {
         val etCtx = findViewById<EditText>(R.id.etCtx)
         val etThreads = findViewById<EditText>(R.id.etThreads)
         val etPrompt = findViewById<EditText>(R.id.etPrompt)
-        val etWorkspace = findViewById<EditText>(R.id.etWorkspace)
+        etWorkspace = findViewById<EditText>(R.id.etWorkspace)
+        val btnPickWorkspace = findViewById<Button>(R.id.btnPickWorkspace)
         val btnSave = findViewById<Button>(R.id.btnSave)
         val btnClear = findViewById<Button>(R.id.btnClearHistory)
 
@@ -47,6 +73,14 @@ class SettingsActivity : AppCompatActivity() {
         etThreads.setText(sp.getInt(KEY_THREADS, 4).toString())
         etPrompt.setText(sp.getString(KEY_PROMPT, ""))
         etWorkspace.setText(sp.getString(KEY_WORKSPACE, DEFAULT_WORKSPACE))
+
+        // 系统原生目录选择器：选中目录后自动填路径
+        btnPickWorkspace.setOnClickListener {
+            val intent = Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+            }
+            startActivityForResult(intent, REQ_PICK_DIR)
+        }
 
         btnSave.setOnClickListener {
             val ctx = etCtx.text.toString().toIntOrNull() ?: 2048
