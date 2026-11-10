@@ -1,5 +1,6 @@
 package com.operit.qwenapp.tools
 
+import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -7,6 +8,14 @@ import org.json.JSONObject
  * 工具注册表：集中管理所有工具，生成 OpenAI tools 数组，按名执行
  */
 object ToolRegistry {
+
+    /** 由 MainActivity 注入的 Application Context（工具内需要环境时使用） */
+    @Volatile
+    var appContext: Context? = null
+
+    fun init(ctx: Context) {
+        appContext = ctx.applicationContext
+    }
 
     private val tools: List<Tool> = listOf(
         CalculatorTool(),

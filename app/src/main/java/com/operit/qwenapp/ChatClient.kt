@@ -28,7 +28,8 @@ class ChatClient {
     private val SYSTEM_PROMPT: String
         get() {
             // 从设置读取自定义提示词，未设置用默认
-            val custom = SettingsActivity.getPrompt(android.app.ActivityThread.currentApplication().applicationContext)
+            val ctx = ToolRegistry.appContext
+            val custom = ctx?.let { SettingsActivity.getPrompt(it) }.orEmpty()
             return if (custom.isNotBlank()) custom else
                 "你是本地AI助手。日常问答直接回答，不要用工具。" +
                 "只有用户要求计算/天气/时间/代码/文件时才用工具。" +

@@ -15,6 +15,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.operit.qwenapp.tools.ToolRegistry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -52,6 +53,9 @@ class MainActivity : AppCompatActivity() {
         btnPickModel = findViewById(R.id.btnPickModel)
         btnStart = findViewById(R.id.btnStart)
         btnSettings = findViewById(R.id.btnSettings)
+
+        // 注入 Application Context 给工具（device_info/memorize 等需要）
+        ToolRegistry.init(applicationContext)
 
         recycler.layoutManager = LinearLayoutManager(this)
         adapter = ChatAdapter(messages)

@@ -34,7 +34,8 @@ class DeviceInfoTool : Tool {
 
     private fun battery(): String {
         return try {
-            val ctx = android.app.ActivityThread.currentApplication().applicationContext
+            val ctx = ToolRegistry.appContext
+                ?: return "🔋 电池: 无可用的应用上下文"
             val bm = ctx.getSystemService(android.content.Context.BATTERY_SERVICE) as BatteryManager
             val level = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
             "🔋 电池电量: ${level}%"

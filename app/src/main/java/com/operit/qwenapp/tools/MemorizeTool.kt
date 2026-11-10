@@ -68,7 +68,8 @@ class MemorizeTool : Tool {
     }
 
     private fun notesFile(): File {
-        val ctx = android.app.ActivityThread.currentApplication().applicationContext
+        val ctx = ToolRegistry.appContext
+            ?: return File(System.getProperty("java.io.tmpdir", "."), "notes.txt")
         val dir = File(ctx.filesDir, "memory")
         dir.mkdirs()
         return File(dir, "notes.txt")
