@@ -1,11 +1,18 @@
 package com.operit.qwenapp
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlinx.coroutines.CoroutineScope
@@ -23,10 +30,15 @@ class MainActivity : AppCompatActivity() {
     private lateinit var input: EditText
     private lateinit var btnSend: Button
     private lateinit var status: TextView
+    private lateinit var btnPickModel: Button
+    private lateinit var btnStart: Button
 
     private val messages = mutableListOf<ChatMessage>()
     private lateinit var adapter: ChatAdapter
     private val client = ChatClient()
+
+    private val REQ_PICK_MODEL = 1001
+    private val REQ_PERMISSION = 1002
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -36,6 +48,8 @@ class MainActivity : AppCompatActivity() {
         input = findViewById(R.id.inputMessage)
         btnSend = findViewById(R.id.btnSend)
         status = findViewById(R.id.serverStatus)
+        btnPickModel = findViewById(R.id.btnPickModel)
+        btnStart = findViewById(R.id.btnStart)
 
         recycler.layoutManager = LinearLayoutManager(this)
         adapter = ChatAdapter(messages)
@@ -45,6 +59,52 @@ class MainActivity : AppCompatActivity() {
         checkServer()
 
         btnSend.setOnClickListener { send() }
+        btnPickModel.setOnClickListener { pickModel() }
+        btnStart.setOnClickListener { startServer() }
+
+        // 动态申请存储权限（Android 6+ 需要，targetSdk 34 需要 MANAGE 或 READ）
+        requestStoragePermission()
+    }
+
+    private fun requestStoragePermission() {
+        if (Build.VERSION.SDK_INT >= 30) {
+            // Android 11+: MANAGE_EXTERNAL_STORAGE 需要跳设置页，这里用 SAF 选择器替代，不强求
+            return
+        }
+        if (Build.VERSION.SDK_INT >= 23) {
+            val perm = Manifest.permission.READ_EXTERNAL_STORAGE
+            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                ActivityCompat.requestPermissions(this, arrayOf(perm), REQ_PERMISSION)
+            }
+        }
+    }
+
+    /** 打开系统文件选择器选 .gguf 模型 */
+    private fun pickModel() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "*/*"
+            putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "*/*"))
+        }
+        startActivityForResult(intent, REQ_PICK_MODEL)
+    }
+
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == REQ_PICK_MODEL && resultCode == RESULT_OK && data?.data != null) {
+            val uri: Uri = data.data!!
+            status.text = "正在导入模型…"
+            CoroutineScope(Dispatchers.Main).launch {
+                val ok = withContext(Dispatchers.IO) { LlamaServer.importModelFromUri(this@MainActivity, uri) }
+                if (ok) {
+                    status.text = "模型已导入，可启动"
+                    Toast.makeText(this@MainActivity, "模型导入成功 ✅", Toast.LENGTH_LONG).show()
+                } else {
+                    status.text = getString(R.string.server_stopped)
+                    Toast.makeText(this@MainActivity, "导入失败", Toast.LENGTH_LONG).show()
+                }
+            }
+        }
     }
 
     private fun checkServer() {
@@ -65,7 +125,7 @@ class MainActivity : AppCompatActivity() {
     private fun promptStart() {
         androidx.appcompat.app.AlertDialog.Builder(this)
             .setTitle("启动本地模型")
-            .setMessage("检测到本地模型未运行。是否启动？\n首次启动需解压程序，约需10秒；模型加载约10秒。\n\n需要模型文件：\n${LlamaServer.MODEL_FILE}\n（需已下载 Qwen2.5-1.5B-tools-Q5_K_M.gguf）")
+            .setMessage("检测到本地模型未运行。是否启动？\n首次启动需解压程序，约需10秒；模型加载约10秒。\n\n需要模型文件：\n${LlamaServer.getModelFile(this).absolutePath}\n（可用下方\"选择模型文件\"导入，或确认默认目录已有模型）")
             .setPositiveButton("启动") { _, _ -> startServer() }
             .setNegativeButton("取消", null)
             .show()
@@ -84,7 +144,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 status.text = getString(R.string.server_stopped)
                 status.setTextColor(0xFFFF9800.toInt())
-                Toast.makeText(this@MainActivity, "启动失败，请确认模型文件存在", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@MainActivity, "启动失败，请先选择模型文件或确认模型存在", Toast.LENGTH_LONG).show()
             }
         }
     }
