@@ -65,7 +65,7 @@ class ChatClient {
         var withTools = wantsTools(userText)
 
         // 工具调用循环，最多 5 轮
-        repeat(5) { round ->
+        for (round in 0 until 5) {
             val body = buildBody(stream = false, withTools = withTools)
 
             val resp = post(body)
