@@ -170,24 +170,47 @@ class MainActivity : AppCompatActivity() {
                     promptStart()
                     return@launch
                 }
-                // 流式：逐字刷新"思考中…"气泡为真实回复
-                val reply = client.chatStream(
-                    text,
-                    onToolCall = { toolInfo ->
-                        runOnUiThread {
-                            messages[thinkingIdx] = ChatMessage("assistant", toolInfo, isToolResult = true)
+                // 计时反馈：等待首字期间每秒刷新"思考中…(X秒)"，避免看起来像卡死
+                var waited = 0
+                val ticker = kotlinx.coroutines.Job()
+                val tickJob = launch {
+                    while (true) {
+                        kotlinx.coroutines.delay(1000)
+                        waited++
+                        val cur = messages.getOrNull(thinkingIdx)?.content.orEmpty()
+                        if (cur == "思考中…" || cur.startsWith("思考中…(")) {
+                            messages[thinkingIdx] = ChatMessage("assistant", "思考中…(${waited}s)")
                             adapter.notifyItemChanged(thinkingIdx)
-                        }
-                    },
-                    onDelta = { delta ->
-                        runOnUiThread {
-                            val cur = messages.getOrNull(thinkingIdx)?.content.orEmpty()
-                            messages[thinkingIdx] = ChatMessage("assistant", cur + delta)
-                            adapter.notifyItemChanged(thinkingIdx)
-                            recycler.scrollToPosition(messages.size - 1)
                         }
                     }
-                )
+                }
+                // 流式：逐字刷新"思考中…"气泡为真实回复
+                val reply = try {
+                    client.chatStream(
+                        text,
+                        onToolCall = { toolInfo ->
+                            runOnUiThread {
+                                // 工具调用时先停掉计时器，显示工具信息
+                                tickJob.cancel()
+                                messages[thinkingIdx] = ChatMessage("assistant", toolInfo, isToolResult = true)
+                                adapter.notifyItemChanged(thinkingIdx)
+                            }
+                        },
+                        onDelta = { delta ->
+                            runOnUiThread {
+                                tickJob.cancel()
+                                val cur = messages.getOrNull(thinkingIdx)?.content.orEmpty()
+                                // 如果还是"思考中…"占位，直接替换；否则追加
+                                val base = if (cur.startsWith("思考中")) "" else cur
+                                messages[thinkingIdx] = ChatMessage("assistant", base + delta)
+                                adapter.notifyItemChanged(thinkingIdx)
+                                recycler.scrollToPosition(messages.size - 1)
+                            }
+                        }
+                    )
+                } finally {
+                    tickJob.cancel()
+                }
                 // 确保最终显示完整回复
                 runOnUiThread {
                     if (reply.isNotEmpty()) {
@@ -197,6 +220,7 @@ class MainActivity : AppCompatActivity() {
                     recycler.scrollToPosition(messages.size - 1)
                 }
             } catch (e: Exception) {
+                // 出现异常时把"思考中…(Xs)"替换为错误信息
                 messages[thinkingIdx] = ChatMessage("assistant", "出错: ${e.message}")
                 adapter.notifyItemChanged(thinkingIdx)
             }
