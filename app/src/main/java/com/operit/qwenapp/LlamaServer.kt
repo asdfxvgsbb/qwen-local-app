@@ -27,28 +27,50 @@ object LlamaServer {
         val dir = File(ctx.filesDir, "llama")
         dir.mkdirs()
         val bin = File(dir, BIN_NAME)
-        // 解压所有 assets 下以 .gz 结尾的文件（llama-server.gz + lib*.so.gz）
         try {
-            ctx.assets.list("").orEmpty()
-                .filter { it.endsWith(".gz") }
-                .forEach { name ->
-                    val target = File(dir, name.removeSuffix(".gz"))
-                    if (!target.exists() || target.length() < 100_000) {
-                        ctx.assets.open(name).use { input ->
-                            FileOutputStream(target).use { out ->
-                                val gz = java.util.zip.GZIPInputStream(input)
-                                gz.copyTo(out)
-                                gz.close()
-                            }
-                        }
-                        if (name.startsWith("lib")) target.setExecutable(true)
-                    }
+            val names = ctx.assets.list("").orEmpty()
+            // aapt 打包 assets 时会自动解压 .gz 文件，因此 APK 里可能是裸 ELF（llama-server）
+            // 也可能是 gzip 流（llama-server.gz），两种都兼容
+            val binSrc = when {
+                names.contains("llama-server") -> "llama-server"
+                names.contains("llama-server.gz") -> "llama-server.gz"
+                else -> null
+            }
+            if (binSrc != null) {
+                val target = File(dir, "llama-server")
+                if (!target.exists() || target.length() < 100_000) {
+                    copyAsset(ctx, binSrc, target)
                 }
+                target.setExecutable(true)
+            }
+            // 依赖库 .so.gz（若有）
+            names.filter { it.startsWith("lib") && it.endsWith(".gz") }.forEach { name ->
+                val target = File(dir, name.removeSuffix(".gz"))
+                if (!target.exists() || target.length() < 100_000) {
+                    copyAsset(ctx, name, target)
+                }
+                target.setExecutable(true)
+            }
         } catch (e: Exception) {
             android.util.Log.e("LlamaServer", "extract failed", e)
         }
         bin.setExecutable(true)
         return bin
+    }
+
+    /** 从 assets 复制（.gz 走 gzip 解压，裸 ELF 直接 copy） */
+    private fun copyAsset(ctx: Context, assetName: String, target: File) {
+        ctx.assets.open(assetName).use { input ->
+            FileOutputStream(target).use { out ->
+                if (assetName.endsWith(".gz")) {
+                    val gz = java.util.zip.GZIPInputStream(input)
+                    gz.copyTo(out)
+                    gz.close()
+                } else {
+                    input.copyTo(out)
+                }
+            }
+        }
     }
 
     /** 启动服务（阻塞直到健康检查通过或超时） */
