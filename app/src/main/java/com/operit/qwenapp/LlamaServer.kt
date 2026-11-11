@@ -22,6 +22,15 @@ object LlamaServer {
     private var process: Process? = null
     private val running = AtomicBoolean(false)
 
+    // 最近 60 行 llama-server 输出日志缓冲（用于启动失败诊断）
+    private val logBuffer = java.util.concurrent.ConcurrentLinkedDeque<String>()
+
+    /** 取最近 n 行服务日志（启动失败时展示给用户） */
+    fun lastLogLines(n: Int): List<String> {
+        val all = logBuffer.toList()
+        return if (all.size <= n) all else all.subList(all.size - n, all.size)
+    }
+
     /** 解压 assets 里的 llama-server 及依赖库到 filesDir（若已存在则跳过） */
     fun extractBinary(ctx: Context): File {
         val dir = File(ctx.filesDir, "llama")
@@ -137,7 +146,8 @@ object LlamaServer {
             "-c", SettingsActivity.getCtx(ctx).toString(),
             "-b", "512",
             "-ub", "512",
-            "--no-mmap"
+            // v0.9.0 已用 --load-mode 取代 --no-mmap（旧参数会直接报错退出）
+            "--load-mode", "none"
         )
         // 依赖库所在目录设为 LD_LIBRARY_PATH（Android 版需要 dlopen libggml 等）
         val libDir = File(ctx.filesDir, "llama").absolutePath
@@ -145,9 +155,11 @@ object LlamaServer {
         pb.redirectErrorStream(true)
         try {
             process = pb.start()
-            // 读取日志线程（防止管道阻塞）
+            // 读取日志线程（防止管道阻塞 + 收集到缓冲便于诊断）
             Thread {
                 process?.inputStream?.bufferedReader()?.forEachLine { line ->
+                    logBuffer.addLast(line)
+                    while (logBuffer.size > 200) { logBuffer.pollFirst() }
                     android.util.Log.d("LlamaServer", line)
                 }
             }.start()
