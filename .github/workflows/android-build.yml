@@ -104,6 +104,20 @@ jobs:
           FILE_BIN=$(find . -name "llama-server" -type f | head -1)
           echo "llama-server binary: $FILE_BIN"
           file "$FILE_BIN"
+          echo "strip 前: $(stat -c%s "$FILE_BIN") bytes"
+          # 去调试符号（llama.cpp 默认带 -g，符号能占几十 MB）：
+          # 用 NDK 自带的 llvm-strip 或系统 aarch64 strip；都不行就跳过
+          STRIP_TOOL=""
+          for cand in "$TOOLCHAIN/bin/llvm-strip" "/usr/bin/aarch64-linux-gnu-strip" "/usr/bin/llvm-strip"; do
+            if [ -x "$cand" ]; then STRIP_TOOL="$cand"; break; fi
+          done
+          if [ -n "$STRIP_TOOL" ]; then
+            echo "使用 strip: $STRIP_TOOL"
+            "$STRIP_TOOL" --strip-unneeded "$FILE_BIN" 2>&1 | tail -2 || true
+          else
+            echo "!! 没找到 strip 工具，跳过"
+          fi
+          echo "strip 后: $(stat -c%s "$FILE_BIN") bytes"
 
       # ========== 2c. 收集静态 llama-server 到 assets ==========
       - name: Collect llama-server to assets
