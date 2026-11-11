@@ -167,7 +167,17 @@ class MainActivity : AppCompatActivity() {
             } else {
                 status.text = getString(R.string.server_stopped)
                 status.setTextColor(0xFFFF9800.toInt())
-                Toast.makeText(this@MainActivity, "启动失败，请先选择模型文件或确认模型存在", Toast.LENGTH_LONG).show()
+                // 启动失败时弹出 llama-server 真实日志（前 40 行），便于定位
+                val logs = LlamaServer.lastLogLines(40)
+                if (logs.isNotEmpty()) {
+                    androidx.appcompat.app.AlertDialog.Builder(this@MainActivity)
+                        .setTitle("启动失败 - 服务日志")
+                        .setMessage(logs.joinToString("\n"))
+                        .setPositiveButton("知道了", null)
+                        .show()
+                } else {
+                    Toast.makeText(this@MainActivity, "启动失败，请先选择模型文件或确认模型存在", Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
