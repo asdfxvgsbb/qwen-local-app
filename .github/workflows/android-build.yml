@@ -56,8 +56,8 @@ jobs:
           echo "TOOLCHAIN=$TOOLCHAIN"
           ls -la $TOOLCHAIN/
 
-          # 用 b10000 稳定版源码（proot 下已验证运行正常）
-          git clone --depth 1 --branch b10000 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp 2>&1 | tail -2 || \
+          # 用 v0.9.0 稳定版源码（支持 Qwen3 模板 enable_thinking=false，2026 新版）
+          git clone --depth 1 --branch v0.9.0 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp 2>&1 | tail -2 || \
           git clone --depth 1 https://github.com/ggml-org/llama.cpp /tmp/llama.cpp 2>&1 | tail -2
           cd /tmp/llama.cpp
 
