@@ -58,6 +58,8 @@ class MainActivity : AppCompatActivity() {
 
         // 注入 Application Context 给工具（device_info/memorize 等需要）
         ToolRegistry.init(applicationContext)
+        // 注入 Activity 引用（短信/电话等危险工具弹确认框用）
+        ToolRegistry.currentActivity = this
 
         // 标题显示当前模型名（适配任意 .gguf 模型）
         refreshTitle()
