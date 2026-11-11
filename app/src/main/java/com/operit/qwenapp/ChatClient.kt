@@ -415,6 +415,12 @@ class ChatClient {
             })
             .put("stream", stream)
             .put("max_tokens", 512)
+        // 快速回答：关闭 Qwen3 思维链（设置页开关，默认开）
+        // llama.cpp 通过 chat_template_kwargs.enable_thinking=false 让 Qwen3 跳过思考直接回答
+        val ctx = ToolRegistry.appContext
+        if (ctx != null && SettingsActivity.getFastReply(ctx)) {
+            body.put("chat_template_kwargs", JSONObject().put("enable_thinking", false))
+        }
         // 只带命中的工具（普通闲聊/未命中 = 不带，省上下文 + 避免小模型乱调用）
         if (toolNames.isNotEmpty()) {
             body.put("tools", ToolRegistry.toToolsJson(toolNames))
