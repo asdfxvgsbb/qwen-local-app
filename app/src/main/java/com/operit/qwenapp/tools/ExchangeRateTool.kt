@@ -27,7 +27,8 @@ class ExchangeRateTool : Tool {
         val rates = tryFetch("https://open.er-api.com/v6/latest/$from")
             ?: tryFetch("https://api.frankfurter.app/latest?from=$from")
             ?: return "汇率查询失败（网络不通或货币代码错误，支持 USD/CNY/EUR/JPY/HKD/GBP 等）"
-        val rate = rates[to] ?: return "不支持货币 $to（可用：${rates.keys().asSequence().toList().take(20).joinToString("/")}）"
+        val rate = rates.optDouble(to, Double.NaN)
+        if (rate.isNaN() || rate <= 0) return "不支持货币 $to（可用：${rates.keys().asSequence().toList().take(20).joinToString("/")}）"
         val result = amount * rate
         val fmt = if (result >= 1000) "%.0f".format(result) else "%.2f".format(result)
         val fmtRate = "%.4f".format(rate)
