@@ -119,7 +119,7 @@
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical"
-            android:layout_marginBottom="16dp">
+            android:layout_marginBottom="12dp">
             <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
@@ -129,6 +129,32 @@
                 android:textColor="#9E9E9E" />
             <Switch
                 android:id="@+id/swWebSearch"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content" />
+        </LinearLayout>
+
+        <!-- 快速回答开关（关闭 Qwen3 思维链） -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="快速回答（关掉模型思考，回答更快）"
+            android:textSize="14sp"
+            android:textColor="#616161" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="16dp">
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="开启后 Qwen3 不再先思考，直接回答（适合快速问答/工具调用）"
+                android:textSize="13sp"
+                android:textColor="#9E9E9E" />
+            <Switch
+                android:id="@+id/swFastReply"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content" />
         </LinearLayout>
