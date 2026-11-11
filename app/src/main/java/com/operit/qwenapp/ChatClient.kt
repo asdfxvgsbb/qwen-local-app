@@ -56,7 +56,16 @@ class ChatClient {
             "set_reminder" to "提醒闹钟",
             "clipboard" to "剪贴板",
             "open_website" to "打开网页",
-            "random" to "随机"
+            "random" to "随机",
+            "web_search" to "网络搜索",
+            "web_summary" to "网页摘要",
+            "exchange_rate" to "汇率换算",
+            "volume" to "音量调节",
+            "brightness" to "屏幕亮度",
+            "flashlight" to "手电筒",
+            "vibrate" to "震动",
+            "send_sms" to "发短信",
+            "make_call" to "打电话"
         )
         val sb = StringBuilder()
         var first = true
@@ -86,7 +95,16 @@ class ChatClient {
         "set_reminder" to listOf("提醒我", "提醒一下", "闹钟", "倒计时", "分钟后提醒", "秒后提醒", "小时后提醒", "待办提醒"),
         "clipboard" to listOf("剪贴板", "复制到", "粘贴出来", "复制这个", "帮我复制", "复制网址"),
         "open_website" to listOf("打开网页", "打开网站", "用浏览器", "上网搜", "浏览网页", "打开百度", "打开淘宝", "打开微博", "打开b站", "打开bilibili", "打开知乎"),
-        "random" to listOf("随机数", "随机选", "帮我选一个", "随机数字", "摇一摇", "抽一个", "抽签", "掷骰子")
+        "random" to listOf("随机数", "随机选", "帮我选一个", "随机数字", "摇一摇", "抽一个", "抽签", "掷骰子"),
+        "web_search" to listOf("搜索", "查一下", "搜一下", "搜搜", "百度一下", "网上查", "查询一下", "看看网上怎么说", "搜资料"),
+        "web_summary" to listOf("网页摘要", "看看这个网页", "网页内容", "网址摘要", "抓取网页"),
+        "exchange_rate" to listOf("汇率", "换算成人民币", "美元等于", "欧元等于", "日元等于", "港币等于", "英镑等于", "换成人民币"),
+        "volume" to listOf("音量调大", "音量调小", "声音大点", "声音小点", "大声点", "小声点", "静音", "取消静音", "把声音"),
+        "brightness" to listOf("屏幕亮度", "调亮", "调暗", "亮度调到", "屏幕亮", "屏幕暗", "亮一点", "暗一点"),
+        "flashlight" to listOf("手电筒", "闪光灯", "开灯", "关灯"),
+        "vibrate" to listOf("震动一下", "振动一下", "手机震动"),
+        "send_sms" to listOf("发短信", "发信息给", "短信给", "发条短信", "短信发"),
+        "make_call" to listOf("打电话给", "打电话", "拨号", "呼叫", "打给")
     )
 
     /** 根据用户消息返回需要带的工具名列表（未命中则空 = 不带工具直接聊天） */
@@ -96,6 +114,14 @@ class ChatClient {
         // 优先级：命中 open_website（打开百度/淘宝/b站等）时，去掉 launch_app 的宽泛"打开"命中，避免同时开App又开网页
         if ("open_website" in list && "launch_app" in list) {
             list = list.filter { it != "launch_app" }
+        }
+        // 优先级：命中 flashlight（打开手电筒/开灯）时，去掉 launch_app 的"打开"命中
+        if ("flashlight" in list && "launch_app" in list) {
+            list = list.filter { it != "launch_app" }
+        }
+        // 优先级：命中 exchange_rate（换算成人民币）时，去掉 unit_convert 的"换算"命中
+        if ("exchange_rate" in list && "unit_convert" in list) {
+            list = list.filter { it != "unit_convert" }
         }
         return list
     }
@@ -177,6 +203,80 @@ class ChatClient {
                         JSONObject().put("type", "choice").put("options", arr)
                     } else null
                 }
+            }
+            "web_search" -> {
+                // "搜索 XX" / "查一下 XX" → query
+                var t = userText
+                val pre = listOf("搜索一下", "搜索", "搜一下", "搜搜", "查一下", "百度一下", "网上查", "查询一下", "搜资料", "搜")
+                    .firstOrNull { t.contains(it) }
+                if (pre != null) t = t.substringAfter(pre).trim()
+                t = t.trim('。', '！', '？', '，', ' ', '.', '!', '?', '：', ':')
+                if (t.isEmpty() || t.length > 60) null else JSONObject().put("query", t)
+            }
+            "web_summary" -> {
+                val m = Regex("(https?://[\\w\\-./?%&=#]+)").find(userText)
+                val url = m?.groupValues?.get(1)
+                if (url.isNullOrEmpty()) null else JSONObject().put("url", url)
+            }
+            "exchange_rate" -> {
+                // "1美元等于多少人民币" / "100美金换日元" / "美元兑人民币"
+                val names = mapOf(
+                    "美元" to "USD", "美金" to "USD", "人民币" to "CNY", "欧元" to "EUR",
+                    "日元" to "JPY", "港币" to "HKD", "英镑" to "GBP", "韩元" to "KRW",
+                    "澳元" to "AUD", "加元" to "CAD", "卢布" to "RUB", "泰铢" to "THB"
+                )
+                // 金额
+                val amt = Regex("(\\d+(?:\\.\\d+)?)").find(userText)?.groupValues?.get(1)?.toDoubleOrNull() ?: 1.0
+                // 找源货币和目标货币
+                val hits = names.entries.filter { (k, _) -> userText.contains(k) }.map { it.value }
+                val from = hits.getOrNull(0)
+                val to = hits.getOrNull(1)
+                if (from == null || to == null) null
+                else JSONObject().put("amount", amt).put("from", from).put("to", to)
+            }
+            "volume" -> {
+                val action = when {
+                    userText.contains("静音") || userText.contains("无声") -> "mute"
+                    userText.contains("取消静音") || userText.contains("恢复声音") -> "unmute"
+                    userText.contains("调大") || userText.contains("大点") || userText.contains("大声") -> "up"
+                    userText.contains("调小") || userText.contains("小点") || userText.contains("小声") -> "down"
+                    else -> null
+                }
+                if (action == null) null else JSONObject().put("action", action)
+            }
+            "brightness" -> {
+                val m = Regex("(\\d+)\\s*%?").find(userText)
+                if (m != null && userText.contains("亮度")) {
+                    JSONObject().put("level", m.groupValues[1].toInt().coerceIn(0, 100))
+                } else {
+                    val action = when {
+                        userText.contains("调暗") || userText.contains("暗一点") || userText.contains("屏幕暗") || userText.contains("暗点") -> "down"
+                        userText.contains("调亮") || userText.contains("亮一点") || userText.contains("屏幕亮") || userText.contains("亮点") -> "up"
+                        else -> null
+                    }
+                    if (action == null) null else JSONObject().put("action", action)
+                }
+            }
+            "flashlight" -> {
+                val on = userText.contains("开") && !userText.contains("关")
+                JSONObject().put("on", on)
+            }
+            "vibrate" -> JSONObject()
+            "send_sms" -> {
+                // "发短信给10086：查话费" / "发短信给13800138000 内容"
+                val phone = Regex("(\\d{5,13})").find(userText)?.groupValues?.get(1)
+                if (phone == null) null
+                else {
+                    var msg = userText.replace(Regex("发短信|发信息给|短信给|发条短信|短信发|给|发送|短信"), "").trim()
+                    msg = msg.replace(phone, "").trim('。', '！', '？', '，', ' ', '：', ':', '.', '!', '?')
+                    if (msg.isEmpty()) msg = "（无内容）"
+                    JSONObject().put("phone", phone).put("message", msg)
+                }
+            }
+            "make_call" -> {
+                // "打电话给10086" / "打给13800138000"
+                val phone = Regex("(\\d{5,13})").find(userText)?.groupValues?.get(1)
+                if (phone == null) null else JSONObject().put("phone", phone)
             }
             // run_code / file_ops / run_terminal / unit_convert / memorize / clipboard 参数复杂，不强行调用
             else -> null
