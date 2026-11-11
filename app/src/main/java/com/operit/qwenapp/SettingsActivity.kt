@@ -24,6 +24,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_PROMPT = "prompt"
         const val KEY_WORKSPACE = "workspace"
         const val KEY_WEB_SEARCH = "web_search_enabled"
+        const val KEY_FAST_REPLY = "fast_reply"
         const val DEFAULT_WORKSPACE = "/sdcard/ai"
 
         fun getCtx(ctx: Context): Int =
@@ -36,6 +37,8 @@ class SettingsActivity : AppCompatActivity() {
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_WORKSPACE, DEFAULT_WORKSPACE) ?: DEFAULT_WORKSPACE
         fun getWebSearchEnabled(ctx: Context): Boolean =
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_WEB_SEARCH, true)
+        fun getFastReply(ctx: Context): Boolean =
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_FAST_REPLY, true)
     }
 
     private val REQ_PICK_DIR = 3001
@@ -69,6 +72,7 @@ class SettingsActivity : AppCompatActivity() {
         val etPrompt = findViewById<EditText>(R.id.etPrompt)
         etWorkspace = findViewById<EditText>(R.id.etWorkspace)
         val swWebSearch = findViewById<Switch>(R.id.swWebSearch)
+        val swFastReply = findViewById<Switch>(R.id.swFastReply)
         val btnPickWorkspace = findViewById<Button>(R.id.btnPickWorkspace)
         val btnSave = findViewById<Button>(R.id.btnSave)
         val btnClear = findViewById<Button>(R.id.btnClearHistory)
@@ -79,6 +83,7 @@ class SettingsActivity : AppCompatActivity() {
         etPrompt.setText(sp.getString(KEY_PROMPT, ""))
         etWorkspace.setText(sp.getString(KEY_WORKSPACE, DEFAULT_WORKSPACE))
         swWebSearch.isChecked = sp.getBoolean(KEY_WEB_SEARCH, true)
+        swFastReply.isChecked = sp.getBoolean(KEY_FAST_REPLY, true)
 
         // 系统原生目录选择器：选中目录后自动填路径
         btnPickWorkspace.setOnClickListener {
@@ -99,6 +104,7 @@ class SettingsActivity : AppCompatActivity() {
                 .putString(KEY_PROMPT, prompt)
                 .putString(KEY_WORKSPACE, workspace)
                 .putBoolean(KEY_WEB_SEARCH, swWebSearch.isChecked)
+                .putBoolean(KEY_FAST_REPLY, swFastReply.isChecked)
                 .apply()
             Toast.makeText(this, "已保存（重启模型后生效）", Toast.LENGTH_SHORT).show()
             finish()
