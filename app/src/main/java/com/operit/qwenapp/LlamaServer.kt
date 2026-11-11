@@ -147,7 +147,10 @@ object LlamaServer {
             "-b", "512",
             "-ub", "512",
             // v0.9.0 已用 --load-mode 取代 --no-mmap（旧参数会直接报错退出）
-            "--load-mode", "none"
+            "--load-mode", "none",
+            // v0.9.0 起 API 传 chat_template_kwargs.enable_thinking 已废弃被忽略，
+            // 必须用启动参数 --reasoning off 才能真正关闭 Qwen3 思维链（快速回答开关）
+            "--reasoning", if (SettingsActivity.getFastReply(ctx)) "off" else "auto"
         )
         // 依赖库所在目录设为 LD_LIBRARY_PATH（Android 版需要 dlopen libggml 等）
         val libDir = File(ctx.filesDir, "llama").absolutePath
