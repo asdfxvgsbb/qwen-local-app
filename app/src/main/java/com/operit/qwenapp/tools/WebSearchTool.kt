@@ -5,19 +5,24 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import com.operit.qwenapp.SettingsActivity
 import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
 import java.net.URLEncoder
 
 /**
- * 网络搜索工具：在设置里可开关（KEY_WEB_SEARCH），执行前先检测联网状态。
- * 主用 cn.bing 搜索页解析前几条结果，失败降级中文维基百科摘要。
+ * 网络搜索工具：
+ * 1. 若输入是网址（http/https 开头）→ 直接抓取该网页正文，不拿去搜索
+ * 2. 否则用 cn.bing（国内可达）搜索前几条结果
+ * 3. 不再跳维基百科兜底（部分网络连不上 zh.wikipedia.org）
+ * 4. 需在设置里开启「网络搜索」开关 + 先检测联网
  */
 class WebSearchTool : Tool {
     override val name = "web_search"
-    override val description = "联网搜索网页信息。参数 query = 要搜索的问题或关键词。搜索前会自动检测网络，且需在设置里开启「网络搜索」开关。如「搜索 2024年诺贝尔奖得主」。"
+    override val description = "联网搜索或抓取网页。输入问题会搜索网页，输入网址会直接抓取该网页内容。参数 query = 问题或网址。如「搜索 2024年诺贝尔奖得主」或「看看 https://example.com」。"
     override val parametersSchema: JSONObject = JSONObject()
         .put("type", "object")
         .put("properties", JSONObject()
-            .put("query", JSONObject().put("type", "string").put("description", "要搜索的问题，如 2024年诺贝尔奖得主"))
+            .put("query", JSONObject().put("type", "string").put("description", "要搜索的问题，或要抓取的网址"))
         )
         .put("required", org.json.JSONArray().put("query"))
 
@@ -32,13 +37,17 @@ class WebSearchTool : Tool {
         }
         // 2. 联网检测
         if (!hasNetwork(ctx)) {
-            return "当前没有网络连接，无法搜索（请检查 Wi-Fi / 移动数据）"
+            return "当前没有网络连接，无法联网（请检查 Wi-Fi / 移动数据）"
         }
-        // 3. 执行搜索：bing 优先，维基兜底
+        // 3. 输入是网址 → 直接抓正文
+        if (query.startsWith("http://") || query.startsWith("https://")) {
+            return fetchUrl(query)
+        }
+        // 4. 否则走必应搜索
         return try {
-            searchBing(query) ?: searchWiki(query)
+            searchBing(query)
         } catch (e: Exception) {
-            try { searchWiki(query) } catch (e2: Exception) { "搜索失败: ${e2.message}" }
+            "搜索失败：${e.message}（网络可能不稳定，或 cn.bing 暂时不可达）"
         }
     }
 
@@ -51,20 +60,50 @@ class WebSearchTool : Tool {
         } catch (e: Exception) { false }
     }
 
-    /** 用 cn.bing 搜索页抓前 5 条结果（标题+网址+摘要） */
-    private fun searchBing(query: String): String? {
+    /** 直接抓取网页正文（去掉标签、脚本、样式） */
+    private fun fetchUrl(rawUrl: String): String {
+        return try {
+            val conn = URL(rawUrl).openConnection() as HttpURLConnection
+            conn.connectTimeout = 10000
+            conn.readTimeout = 12000
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Mobile Safari/537.36")
+            conn.instanceFollowRedirects = true
+            conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9")
+            val code = conn.responseCode
+            if (code !in 200..399) return "网页返回错误状态码：$code"
+            val html = conn.inputStream.bufferedReader().use { it.readText() }
+            conn.disconnect()
+            val text = stripHtml(html)
+            if (text.isBlank()) "网页没有可读内容（可能是视频/图片/JS渲染页，或需要登录）"
+            else {
+                // 保留标题，正文截断到 1200 字
+                val title = Regex("<title[^>]*>([\\s\\S]*?)</title>", RegexOption.IGNORE_CASE)
+                    .find(html)?.groupValues?.get(1)?.replace(Regex("<[^>]+>"), "")?.trim()
+                val sb = StringBuilder()
+                if (!title.isNullOrEmpty()) sb.append("📄 ").append(title).append('\n')
+                sb.append(text.take(1200))
+                if (text.length > 1200) sb.append("\n…（内容较长已截断）")
+                sb.toString()
+            }
+        } catch (e: Exception) {
+            "抓取网页失败：${e.message}"
+        }
+    }
+
+    /** 用 cn.bing 搜索页抓前 5 条结果 */
+    private fun searchBing(query: String): String {
         val url = "https://cn.bing.com/search?q=" + URLEncoder.encode(query, "UTF-8")
-        val conn = java.net.URI(url).toURL().openConnection() as java.net.HttpURLConnection
+        val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 8000
         conn.readTimeout = 8000
-        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 9) AppleWebKit/537.36")
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Mobile Safari/537.36")
+        conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9")
         val html = conn.inputStream.bufferedReader().use { it.readText() }
         conn.disconnect()
 
-        // 提取 <li class="b_algo">...</li> 块
         val liRegex = Regex("<li class=\"b_algo\"[\\s\\S]*?<h2[^>]*><a[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a></h2>[\\s\\S]*?(?:<p[^>]*>([\\s\\S]*?)</p>)?")
         val matches = liRegex.findAll(html).take(5).toList()
-        if (matches.isEmpty()) return null
+        if (matches.isEmpty()) return "没有搜到「$query」的结果，换个说法试试"
 
         val sb = StringBuilder("「$query」搜索结果：\n")
         var i = 0
@@ -74,36 +113,21 @@ class WebSearchTool : Tool {
             val title = m.groupValues[2].replace(Regex("<[^>]+>"), "").trim()
             val snippet = m.groupValues[3].replace(Regex("<[^>]+>"), "").trim()
             if (title.isEmpty()) continue
-            sb.append("$i. $title\n")
+            sb.append("$i. ").append(title).append('\n')
             if (snippet.isNotEmpty()) sb.append(snippet).append('\n')
-            // 只保留域名做简短来源
-            val domain = runCatching { java.net.URI(link).host?.removePrefix("www.") ?: "" }.getOrDefault("")
-            if (domain.isNotEmpty()) sb.append("（$domain）\n")
+            sb.append("（").append(link).append("）\n")
         }
         return sb.toString().trim()
     }
 
-    /** 中文维基百科摘要兜底（适合"XX是什么"类查询） */
-    private fun searchWiki(query: String): String {
-        val url = "https://zh.wikipedia.org/w/api.php?action=query&prop=extracts&exintro&explaintext&format=json&titles=" +
-            URLEncoder.encode(query, "UTF-8")
-        val conn = java.net.URI(url).toURL().openConnection() as java.net.HttpURLConnection
-        conn.connectTimeout = 8000
-        conn.readTimeout = 8000
-        val text = conn.inputStream.bufferedReader().use { it.readText() }
-        conn.disconnect()
-        val json = JSONObject(text)
-        val pages = json.getJSONObject("query").getJSONObject("pages")
-        val keys = pages.keys()
-        while (keys.hasNext()) {
-            val page = pages.getJSONObject(keys.next())
-            if (page.has("extract")) {
-                val extract = page.getString("extract").trim()
-                if (extract.isNotEmpty()) {
-                    return "「$query」百科摘要：\n" + extract.take(800) + (if (extract.length > 800) "…" else "")
-                }
-            }
-        }
-        return "没有找到「$query」的相关结果，换个说法试试"
+    private fun stripHtml(html: String): String {
+        var s = html.replace(Regex("(?is)<script[^>]*>.*?</script>"), " ")
+            .replace(Regex("(?is)<style[^>]*>.*?</style>"), " ")
+            .replace(Regex("(?is)<!--.*?-->"), " ")
+            .replace(Regex("(?is)<noscript[^>]*>.*?</noscript>"), " ")
+        s = s.replace(Regex("<[^>]+>"), " ")
+        s = s.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
+            .replace("&quot;", "\"").replace("&#39;", "'").replace("&middot;", "·")
+        return s.replace(Regex("\\s+"), " ").trim()
     }
 }
