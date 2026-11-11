@@ -24,6 +24,13 @@ object LlamaServer {
     private var process: Process? = null
     private val running = AtomicBoolean(false)
 
+    // 最近一次启动失败的原因（展示给用户诊断）
+    @Volatile
+    private var lastError: String = ""
+
+    /** 取最近一次启动失败原因 */
+    fun lastError(): String = lastError
+
     // 最近 60 行 llama-server 输出日志缓冲（用于启动失败诊断）
     private val logBuffer = java.util.concurrent.ConcurrentLinkedDeque<String>()
 
@@ -33,7 +40,7 @@ object LlamaServer {
         return if (all.size <= n) all else all.subList(all.size - n, all.size)
     }
 
-    /** 解压 assets 里的 llama-server 及依赖库到 filesDir（若已存在且大小一致则跳过） */
+    /** 解压 assets 里的 llama-server 到 filesDir（每次都解压，12MB 仅需1秒，避免大小比较/压缩判断出错） */
     fun extractBinary(ctx: Context): File {
         val dir = File(ctx.filesDir, "llama")
         dir.mkdirs()
@@ -48,27 +55,14 @@ object LlamaServer {
                 else -> null
             }
             if (binSrc != null) {
-                val target = File(dir, "llama-server")
-                val assetSize = ctx.assets.openFd(binSrc).length
-                // 用 asset 大小判断是否需要重解压（APK 升级后旧文件还在，必须重解压新二进制）
-                if (!target.exists() || target.length() != assetSize) {
-                    copyAsset(ctx, binSrc, target)
-                }
-                target.setExecutable(true)
-            }
-            // 依赖库 .so.gz（若有）
-            names.filter { it.startsWith("lib") && it.endsWith(".gz") }.forEach { name ->
-                val target = File(dir, name.removeSuffix(".gz"))
-                val assetSize = try { ctx.assets.openFd(name).length } catch (_: Exception) { -1L }
-                if (!target.exists() || (assetSize > 0 && target.length() != assetSize)) {
-                    copyAsset(ctx, name, target)
-                }
-                target.setExecutable(true)
+                // 注意：不能用 assets.openFd() 取大小（压缩存储的资产会抛异常被静默吞掉，
+                // 导致引擎没解压出来、启动失败）。直接每次都复制最稳妥。
+                copyAsset(ctx, binSrc, bin)
+                bin.setExecutable(true)
             }
         } catch (e: Exception) {
             android.util.Log.e("LlamaServer", "extract failed", e)
         }
-        bin.setExecutable(true)
         return bin
     }
 
@@ -128,6 +122,7 @@ object LlamaServer {
     /** 启动服务（阻塞直到健康检查通过或超时） */
     fun start(ctx: Context): Boolean {
         if (running.get()) return true
+        lastError = ""
         // 关键：无条件先杀掉可能残留的旧 llama-server 进程（可能是旧 APK 用旧参数启动的、
         // 或带旧二进制的独立进程，不会随 App 被杀而终止）。
         // 不这样做的话，端口 8080 已有服务时下面会直接复用，导致 --reasoning 等新启动参数永不生效。
@@ -135,8 +130,16 @@ object LlamaServer {
         Thread.sleep(300)
 
         val bin = extractBinary(ctx)
+        if (!bin.exists() || bin.length() < 100_000) {
+            lastError = "引擎解压失败: ${bin.absolutePath} 不存在或过小(${bin.length()}B)"
+            return false
+        }
         val model = getModelFile(ctx)
-        if (!model.exists()) return false
+        if (!model.exists()) {
+            lastError = "模型文件不存在: ${model.absolutePath}\n请用「选择模型文件」导入"
+            return false
+        }
+        lastError = "引擎: ${bin.absolutePath}(${bin.length()/1048576}MB)\n模型: ${model.absolutePath}\n等待健康检查…"
 
         // 老的 kill 掉
         stop()
