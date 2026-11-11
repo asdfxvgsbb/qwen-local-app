@@ -42,7 +42,7 @@ class WebSummaryTool : Tool {
         // 去标签
         s = s.replace(Regex("<[^>]+>"), " ")
         // 反转义
-        s = s.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace(""", "\"").replace("&#39;", "'")
+        s = s.replace("&nbsp;", " ").replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&#39;", "'")
         // 压缩空白
         return s.replace(Regex("\\s+"), " ").trim()
     }
