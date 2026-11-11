@@ -13,10 +13,12 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object LlamaServer {
 
-    private const val PORT = 8080
+    private const val PORT = 8081
     private const val BIN_NAME = "llama-server"
-    private const val MODEL_DIR = "/sdcard/ai/qwen25-0.5b-tools"
-    const val MODEL_FILE = "$MODEL_DIR/Qwen2.5-0.5B-Instruct-Q4_K_M.gguf"
+    // 默认模型改为 Qwen3-0.6B（原生工具 + 快 + 支持 --reasoning 关思维链）
+    // 若用户手动选过模型（SAF 导入/选文件），getModelFile 会优先用所选路径
+    private const val MODEL_DIR = "/storage/emulated/0/Download"
+    const val MODEL_FILE = "$MODEL_DIR/Qwen3-0.6B-Q4_K_M.gguf"
     const val BASE_URL = "http://127.0.0.1:$PORT/v1"
 
     private var process: Process? = null
@@ -31,7 +33,7 @@ object LlamaServer {
         return if (all.size <= n) all else all.subList(all.size - n, all.size)
     }
 
-    /** 解压 assets 里的 llama-server 及依赖库到 filesDir（若已存在则跳过） */
+    /** 解压 assets 里的 llama-server 及依赖库到 filesDir（若已存在且大小一致则跳过） */
     fun extractBinary(ctx: Context): File {
         val dir = File(ctx.filesDir, "llama")
         dir.mkdirs()
@@ -47,7 +49,9 @@ object LlamaServer {
             }
             if (binSrc != null) {
                 val target = File(dir, "llama-server")
-                if (!target.exists() || target.length() < 100_000) {
+                val assetSize = ctx.assets.openFd(binSrc).length
+                // 用 asset 大小判断是否需要重解压（APK 升级后旧文件还在，必须重解压新二进制）
+                if (!target.exists() || target.length() != assetSize) {
                     copyAsset(ctx, binSrc, target)
                 }
                 target.setExecutable(true)
@@ -55,7 +59,8 @@ object LlamaServer {
             // 依赖库 .so.gz（若有）
             names.filter { it.startsWith("lib") && it.endsWith(".gz") }.forEach { name ->
                 val target = File(dir, name.removeSuffix(".gz"))
-                if (!target.exists() || target.length() < 100_000) {
+                val assetSize = try { ctx.assets.openFd(name).length } catch (_: Exception) { -1L }
+                if (!target.exists() || (assetSize > 0 && target.length() != assetSize)) {
                     copyAsset(ctx, name, target)
                 }
                 target.setExecutable(true)
@@ -123,11 +128,11 @@ object LlamaServer {
     /** 启动服务（阻塞直到健康检查通过或超时） */
     fun start(ctx: Context): Boolean {
         if (running.get()) return true
-        // 端口已有服务则直接复用（可能是外部/旧进程）
-        if (isHealthy()) {
-            running.set(true)
-            return true
-        }
+        // 关键：无条件先杀掉可能残留的旧 llama-server 进程（可能是旧 APK 用旧参数启动的、
+        // 或带旧二进制的独立进程，不会随 App 被杀而终止）。
+        // 不这样做的话，端口 8080 已有服务时下面会直接复用，导致 --reasoning 等新启动参数永不生效。
+        stop()
+        Thread.sleep(300)
 
         val bin = extractBinary(ctx)
         val model = getModelFile(ctx)
