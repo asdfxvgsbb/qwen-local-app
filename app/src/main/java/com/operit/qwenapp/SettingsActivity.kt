@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.provider.DocumentsContract
 import android.widget.Button
 import android.widget.EditText
+import android.widget.Switch
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 
@@ -22,6 +23,7 @@ class SettingsActivity : AppCompatActivity() {
         const val KEY_THREADS = "threads"
         const val KEY_PROMPT = "prompt"
         const val KEY_WORKSPACE = "workspace"
+        const val KEY_WEB_SEARCH = "web_search_enabled"
         const val DEFAULT_WORKSPACE = "/sdcard/ai"
 
         fun getCtx(ctx: Context): Int =
@@ -32,6 +34,8 @@ class SettingsActivity : AppCompatActivity() {
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_PROMPT, "") ?: ""
         fun getWorkspace(ctx: Context): String =
             ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_WORKSPACE, DEFAULT_WORKSPACE) ?: DEFAULT_WORKSPACE
+        fun getWebSearchEnabled(ctx: Context): Boolean =
+            ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_WEB_SEARCH, true)
     }
 
     private val REQ_PICK_DIR = 3001
@@ -64,6 +68,7 @@ class SettingsActivity : AppCompatActivity() {
         val etThreads = findViewById<EditText>(R.id.etThreads)
         val etPrompt = findViewById<EditText>(R.id.etPrompt)
         etWorkspace = findViewById<EditText>(R.id.etWorkspace)
+        val swWebSearch = findViewById<Switch>(R.id.swWebSearch)
         val btnPickWorkspace = findViewById<Button>(R.id.btnPickWorkspace)
         val btnSave = findViewById<Button>(R.id.btnSave)
         val btnClear = findViewById<Button>(R.id.btnClearHistory)
@@ -73,6 +78,7 @@ class SettingsActivity : AppCompatActivity() {
         etThreads.setText(sp.getInt(KEY_THREADS, 4).toString())
         etPrompt.setText(sp.getString(KEY_PROMPT, ""))
         etWorkspace.setText(sp.getString(KEY_WORKSPACE, DEFAULT_WORKSPACE))
+        swWebSearch.isChecked = sp.getBoolean(KEY_WEB_SEARCH, true)
 
         // 系统原生目录选择器：选中目录后自动填路径
         btnPickWorkspace.setOnClickListener {
@@ -92,6 +98,7 @@ class SettingsActivity : AppCompatActivity() {
                 .putInt(KEY_THREADS, threads.coerceIn(1, 8))
                 .putString(KEY_PROMPT, prompt)
                 .putString(KEY_WORKSPACE, workspace)
+                .putBoolean(KEY_WEB_SEARCH, swWebSearch.isChecked)
                 .apply()
             Toast.makeText(this, "已保存（重启模型后生效）", Toast.LENGTH_SHORT).show()
             finish()
