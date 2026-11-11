@@ -1,8 +1,12 @@
 package com.operit.qwenapp.tools
 
+import android.app.Activity
+import android.app.AlertDialog
 import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /**
  * 工具注册表：集中管理所有工具，生成 OpenAI tools 数组，按名执行
@@ -13,8 +17,37 @@ object ToolRegistry {
     @Volatile
     var appContext: Context? = null
 
+    /** 由 MainActivity 注入的 Activity 引用（危险工具弹确认框用） */
+    @Volatile
+    var currentActivity: Activity? = null
+
     fun init(ctx: Context) {
         appContext = ctx.applicationContext
+    }
+
+    /**
+     * 危险工具确认弹窗：主线程弹 AlertDialog，等待用户点「执行/取消」。
+     * 超时（默认 30 秒）视为取消，返回 false。
+     */
+    fun confirm(title: String, msg: String): Boolean {
+        val act = currentActivity ?: return false
+        val latch = CountDownLatch(1)
+        var result = false
+        act.runOnUiThread {
+            AlertDialog.Builder(act)
+                .setTitle(title)
+                .setMessage(msg)
+                .setCancelable(false)
+                .setPositiveButton("执行") { _, _ -> result = true; latch.countDown() }
+                .setNegativeButton("取消") { _, _ -> result = false; latch.countDown() }
+                .show()
+        }
+        try {
+            latch.await(30, TimeUnit.SECONDS)
+        } catch (e: InterruptedException) {
+            return false
+        }
+        return result
     }
 
     private val tools: List<Tool> = listOf(
@@ -31,7 +64,16 @@ object ToolRegistry {
         SetReminderTool(),  // 【提醒】倒计时/闹钟提醒
         ClipboardTool(),    // 【剪贴板】读写系统剪贴板
         OpenWebsiteTool(),  // 【打开网页】浏览器打开网址
-        RandomTool()        // 【随机】随机数/随机选项
+        RandomTool(),       // 【随机】随机数/随机选项
+        VibrateTool(),      // 【震动】手机震动
+        VolumeTool(),       // 【音量】媒体音量调节
+        FlashlightTool(),   // 【手电筒】闪光灯开关
+        BrightnessTool(),   // 【亮度】屏幕亮度调节
+        WebSearchTool(),    // 【网络搜索】联网搜索（需设置开关）
+        WebSummaryTool(),   // 【网页摘要】抓取网页正文
+        ExchangeRateTool(), // 【汇率】实时汇率换算
+        SmsTool(),          // 【发短信】需权限+确认
+        CallTool()          // 【打电话】需权限+确认
     )
 
     /** 生成传给 /v1/chat/completions 的 tools 参数（names 为 null 时传全部） */
