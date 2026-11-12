@@ -51,16 +51,14 @@ class ChatAdapter(private val items: MutableList<ChatMessage>) :
                     append("结果：").append(msg.toolResult)
                 }
             }.trim()
-            val MAX_DETAIL = 260
+            val MAX_DETAIL = 300
             val isExpanded = expanded.contains(position)
             holder.tvToolDetail.text = if (!isExpanded && detail.length > MAX_DETAIL)
                 detail.take(MAX_DETAIL) + "\n…（点击查看全部）" else detail
 
-            // 关键：工具跑完/有结果时默认展开显示结果（不用点击），运行中才折叠
-            // 这样每个工具执行完，结果直接展示在卡片里，下一个工具卡片自然排在下面
-            val hasResult = msg.toolResult.isNotEmpty()
-            holder.tvToolDetail.visibility =
-                if (hasResult || isExpanded) View.VISIBLE else View.GONE
+            // 默认折叠成小标题行（工具名一行），点击才展开详情。
+            // 这样工具跑完不占地方、能随时缩成一行，多个工具也一目了然。
+            holder.tvToolDetail.visibility = if (isExpanded) View.VISIBLE else View.GONE
             holder.toolCard.setOnClickListener {
                 if (isExpanded) expanded.remove(position) else expanded.add(position)
                 notifyItemChanged(position)
