@@ -377,6 +377,8 @@ class ChatClient {
                         .put("tool_call_id", callId)
                         .put("content", result))
                 }
+                // 关键修复：已通过 tool_calls 执行过工具，清空 toolNames 避免下一轮重复执行
+                toolNames = emptyList()
                 // 继续下一轮，让模型根据结果总结
             } else {
                 // 正常文本回答（模型没调工具）
@@ -539,6 +541,9 @@ class ChatClient {
                         .put("tool_call_id", callId)
                         .put("content", result))
                 }
+                // 关键修复：这一轮已通过 tool_calls 执行过工具，清空 toolNames，
+                // 避免下一轮又触发 forceRunTools 把同样的工具重复执行一遍（卡片会重复出现）
+                toolNames = emptyList()
                 // 继续下一轮流式输出最终回答
             } else {
                 // 纯文本回答结束
