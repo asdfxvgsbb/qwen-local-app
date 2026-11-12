@@ -30,7 +30,7 @@ class ChatAdapter(private val items: MutableList<ChatMessage>) :
     override fun onBindViewHolder(holder: VH, position: Int) {
         val msg = items[position]
 
-        // 工具卡片消息：显示小卡片，标题三态，点击展开/收起详情
+        // 工具卡片消息：显示小卡片，标题三态，点击可展开/收起详情
         if (msg.toolName != null) {
             holder.bubble.visibility = View.GONE
             holder.toolCard.visibility = View.VISIBLE
@@ -42,7 +42,7 @@ class ChatAdapter(private val items: MutableList<ChatMessage>) :
                 else -> "🔧 ${msg.toolName}"
             }
 
-            // 详情 = 参数 + 结果
+            // 详情 = 参数 + 结果（结果太长时截断显示，点击卡片看全部）
             val detail = buildString {
                 if (msg.toolArgs.isNotBlank() && msg.toolArgs != "{}") {
                     append("参数：").append(msg.toolArgs).append("\n")
@@ -50,12 +50,17 @@ class ChatAdapter(private val items: MutableList<ChatMessage>) :
                 if (msg.toolResult.isNotEmpty()) {
                     append("结果：").append(msg.toolResult)
                 }
-            }
-            holder.tvToolDetail.text = detail.trim()
-
-            // 展开/收起
+            }.trim()
+            val MAX_DETAIL = 260
             val isExpanded = expanded.contains(position)
-            holder.tvToolDetail.visibility = if (isExpanded) View.VISIBLE else View.GONE
+            holder.tvToolDetail.text = if (!isExpanded && detail.length > MAX_DETAIL)
+                detail.take(MAX_DETAIL) + "\n…（点击查看全部）" else detail
+
+            // 关键：工具跑完/有结果时默认展开显示结果（不用点击），运行中才折叠
+            // 这样每个工具执行完，结果直接展示在卡片里，下一个工具卡片自然排在下面
+            val hasResult = msg.toolResult.isNotEmpty()
+            holder.tvToolDetail.visibility =
+                if (hasResult || isExpanded) View.VISIBLE else View.GONE
             holder.toolCard.setOnClickListener {
                 if (isExpanded) expanded.remove(position) else expanded.add(position)
                 notifyItemChanged(position)
