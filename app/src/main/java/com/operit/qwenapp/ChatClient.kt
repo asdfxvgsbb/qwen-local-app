@@ -263,19 +263,26 @@ class ChatClient {
             }
             "vibrate" -> JSONObject()
             "send_sms" -> {
-                // "发短信给10086：查话费" / "发短信给13800138000 内容"
-                val phone = Regex("(\\d{5,13})").find(userText)?.groupValues?.get(1)
+                // "发短信给10086：查话费" / "发短信给妈妈：晚上回家吃饭"
+                // 提取"给XXX"后的内容作为号码/名字（到冒号/逗号/句号为止）
+                val t2 = userText.replace(Regex("发短信给|发信息给|短信给|发条短信给|发条短信|短信发|发短信|发送短信|给|发送"), "")
+                    .trim('。', '！', '？', '，', ' ', '：', ':', '.', '!', '?')
+                val phoneM = Regex("^(\\d{5,13}|[\\u4e00-\\u9fa5A-Za-z]{1,6})").find(t2)
+                val phone = phoneM?.groupValues?.get(1)
                 if (phone == null) null
                 else {
-                    var msg = userText.replace(Regex("发短信|发信息给|短信给|发条短信|短信发|给|发送|短信"), "").trim()
+                    var msg = userText.replace(Regex("发短信给|发信息给|短信给|发条短信给|发条短信|短信发|发短信|发送短信|给|发送|短信"), "").trim()
                     msg = msg.replace(phone, "").trim('。', '！', '？', '，', ' ', '：', ':', '.', '!', '?')
                     if (msg.isEmpty()) msg = "（无内容）"
                     JSONObject().put("phone", phone).put("message", msg)
                 }
             }
             "make_call" -> {
-                // "打电话给10086" / "打给13800138000"
-                val phone = Regex("(\\d{5,13})").find(userText)?.groupValues?.get(1)
+                // "打电话给妈妈" / "打给13800138000"
+                val t2 = userText.replace(Regex("打电话给|打电话|拨号|呼叫|打给|帮我|请"), "")
+                    .trim('。', '！', '？', '，', ' ', '：', ':', '.', '!', '?')
+                val phoneM = Regex("^(\\d{5,13}|[\\u4e00-\\u9fa5A-Za-z]{1,6})").find(t2)
+                val phone = phoneM?.groupValues?.get(1)
                 if (phone == null) null else JSONObject().put("phone", phone)
             }
             // ---- 以下为 v9.17 新增自动参数提取（之前关键词命中但执行不了） ----
