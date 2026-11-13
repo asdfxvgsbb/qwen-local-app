@@ -37,12 +37,23 @@ class TerminalTool : Tool {
         @Volatile private var proc: Process? = null
         @Volatile private var writer: OutputStream? = null
 
-        /** 获取常驻 sh 会话（无则新建），进程存活时复用 */
+        /** 获取常驻 shell 会话（无则新建），进程存活时复用。
+         *  优先用内置 Termux bash（真 Linux 环境）；未就绪退回系统 sh。 */
         @Synchronized
         private fun acquireSession(): Pair<Process, OutputStream> {
             val p = proc
             if (p != null && p.isAlive && writer != null) return p to writer!!
-            val np = ProcessBuilder("sh").redirectErrorStream(true).start()
+            val ctx = ToolRegistry.appContext
+            val bash = ctx?.let { TermuxRuntime.bashPath(it) }
+            val np: Process = if (bash != null) {
+                val pb = ProcessBuilder(bash, "--noprofile", "--norc")
+                pb.redirectErrorStream(true)
+                // 注入 Termux 环境变量，让子进程能找到 lib/命令
+                pb.environment().putAll(TermuxRuntime.env(ctx!!))
+                pb.start()
+            } else {
+                ProcessBuilder("sh").redirectErrorStream(true).start()
+            }
             proc = np
             writer = np.outputStream
             return np to writer!!
