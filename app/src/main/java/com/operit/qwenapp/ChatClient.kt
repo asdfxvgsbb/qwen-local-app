@@ -104,7 +104,8 @@ class ChatClient {
         "flashlight" to listOf("手电筒", "闪光灯", "开灯", "关灯"),
         "vibrate" to listOf("震动一下", "振动一下", "手机震动"),
         "send_sms" to listOf("发短信", "发信息给", "短信给", "发条短信", "短信发"),
-        "make_call" to listOf("打电话给", "打电话", "拨号", "呼叫", "打给")
+        "make_call" to listOf("打电话给", "打电话", "拨号", "呼叫", "打给"),
+        "lookup_contact" to listOf("查一下电话", "查电话", "查联系人", "找电话", "电话是多少", "电话多少", "手机号是多少", "号码是多少", "查一下通讯录")
     )
 
     /** 根据用户消息返回需要带的工具名列表（未命中则空 = 不带工具直接聊天） */
@@ -141,10 +142,13 @@ class ChatClient {
                 else JSONObject().put("expr", m)
             }
             "get_weather" -> {
-                // 提取"XXX天气"，如"北京天气"、"广州的天气"
-                val m = Regex("([\\u4e00-\\u9fa5A-Za-z]{1,6})[的]?天气").find(userText)
+                // 提取"XXX天气"，如"北京天气"、"广州的天气"；
+                // 但"今天/明天/后天天气"不带城市 → 留空走三级降级（设置城市→IP定位）
+                val m = Regex("([\\u4e00-\\u9fa5A-Za-z]{2,6})[的]?天气").find(userText)
                 val city = m?.groupValues?.get(1)
-                if (city.isNullOrEmpty()) null else JSONObject().put("city", city)
+                if (city == null || city == "今天" || city == "明天" || city == "后天" || city == "昨天" || city == "现在" || city == "今日") {
+                    JSONObject()  // 不带城市：让 WeatherTool 用「我的城市」或 IP 定位
+                } else JSONObject().put("city", city)
             }
             "launch_app" -> {
                 // 提取应用名：去掉"帮我打开/打开/启动"等前缀，取剩余部分
@@ -284,6 +288,15 @@ class ChatClient {
                 val phoneM = Regex("^(\\d{5,13}|[\\u4e00-\\u9fa5A-Za-z]{1,6})").find(t2)
                 val phone = phoneM?.groupValues?.get(1)
                 if (phone == null) null else JSONObject().put("phone", phone)
+            }
+            "lookup_contact" -> {
+                // "查一下张三的电话" / "查妈妈电话" / "找一下李四的手机号" / "妈妈电话是多少"
+                // ①去掉前缀动词 ②去掉尾部描述词 → 剩余即为名字
+                var t = userText.replace(Regex("^(?:帮我)?(?:查一下|查一查|查查|查|找一下|找找|找)"), "")
+                t = t.replace(Regex("(?:的)?(?:电话号码|手机号码|手机号|电话号码|电话|号码|通讯录|联系方式)(?:是)?(?:多少)?$"), "")
+                    .trim('。', '！', '？', '，', ' ', '.', '!', '?', '：', ':')
+                    .removeSuffix("吧").trim()
+                if (t.isEmpty() || t.length > 10) null else JSONObject().put("name", t)
             }
             // ---- 以下为 v9.17 新增自动参数提取（之前关键词命中但执行不了） ----
             "unit_convert" -> autoUnitConvert(userText)
