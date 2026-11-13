@@ -30,6 +30,28 @@ class SetReminderTool : Tool {
         if (msg.isEmpty()) return "错误：缺少 message 提醒内容"
         val ctx = ToolRegistry.appContext ?: return "错误：应用上下文未初始化"
 
+        // Android 13+ (API 33) 通知权限：未授权时引导
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
+            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            val go = ToolRegistry.confirm(
+                "需要通知权限",
+                "提醒到点后需要发送通知。\n\n点击「去授权」将跳转到系统设置开启通知权限，然后返回重试。"
+            )
+            if (go) {
+                try {
+                    val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, ctx.packageName)
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(intent)
+                    return "已为你打开通知设置，请开启「本地 Agent」通知权限后再设置提醒"
+                } catch (e: Exception) {
+                    return "无法打开通知设置：${e.message}。请到 系统设置→应用→本地 Agent→通知 开启"
+                }
+            }
+            return "已取消（未授权时无法发送提醒通知）"
+        }
+
         // 通知渠道（Android 8+ 必须）
         val nm = ctx.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         val channel = NotificationChannel("reminder", "提醒", NotificationManager.IMPORTANCE_HIGH)
