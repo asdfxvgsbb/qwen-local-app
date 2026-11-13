@@ -61,6 +61,12 @@ class MainActivity : AppCompatActivity() {
         // 注入 Activity 引用（短信/电话等危险工具弹确认框用）
         ToolRegistry.currentActivity = this
 
+        // 前台保活服务：退后台保持模型/悬浮窗/工具存活（Android 13+ 需通知权限）
+        AgentService.start(this)
+
+        // 首次使用引导：悬浮窗权限 + 电池优化白名单（分享友好：只在首次弹一次）
+        firstRunGuide()
+
         // 标题显示当前模型名（适配任意 .gguf 模型）
         refreshTitle()
 
@@ -103,6 +109,54 @@ class MainActivity : AppCompatActivity() {
             putExtra(Intent.EXTRA_MIME_TYPES, arrayOf("application/octet-stream", "*/*"))
         }
         startActivityForResult(intent, REQ_PICK_MODEL)
+    }
+
+    /** 首次使用引导（分享友好，只弹一次）：悬浮窗权限 + 电池优化白名单 */
+    private fun firstRunGuide() {
+        val sp = getSharedPreferences("guide", MODE_PRIVATE)
+        if (sp.getBoolean("done", false)) return
+        sp.edit().putBoolean("done", true).apply()
+
+        val missing = StringBuilder()
+        // 1. 悬浮窗权限（工具调用时顶部显示状态条需要）
+        if (!com.operit.qwenapp.tools.FloatWindowManager.hasOverlayPermission(this)) {
+            missing.append("• 悬浮窗权限：显示「本地 Agent 正在干活」的顶部状态条\n")
+        }
+        // 2. 电池优化白名单（退后台不被系统杀掉，保活关键）
+        val pm = getSystemService(POWER_SERVICE) as android.os.PowerManager
+        if (!pm.isIgnoringBatteryOptimizations(packageName)) {
+            missing.append("• 电池优化白名单：退后台后不被系统回收，模型/工具持续存活\n")
+        }
+        if (missing.isEmpty()) return
+
+        androidx.appcompat.app.AlertDialog.Builder(this)
+            .setTitle("需要两项权限")
+            .setMessage("为了悬浮窗状态条和退后台保活，请允许：\n\n$missing\n（可在「设置-本应用」里随时修改）")
+            .setPositiveButton("去开启") { _, _ ->
+                if (!com.operit.qwenapp.tools.FloatWindowManager.hasOverlayPermission(this)) {
+                    // 悬浮窗权限设置页
+                    try {
+                        startActivity(Intent(
+                            android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                            Uri.parse("package:$packageName")
+                        ))
+                    } catch (_: Exception) {
+                        startActivity(Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                    }
+                } else {
+                    // 悬浮窗已开，去电池优化白名单
+                    try {
+                        startActivity(Intent(
+                            android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                            Uri.parse("package:$packageName")
+                        ))
+                    } catch (_: Exception) {
+                        startActivity(Intent(android.provider.Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
+                    }
+                }
+            }
+            .setNegativeButton("暂不", null)
+            .show()
     }
 
     /** 刷新顶部标题：显示当前模型文件名（切换模型后调用） */
