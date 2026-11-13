@@ -16,12 +16,21 @@ class WeatherTool : Tool {
         .put("required", org.json.JSONArray().put("city"))
 
     override fun execute(args: JSONObject): String {
-        val city = args.optString("city", "").trim()
-        if (city.isEmpty()) return "错误：缺少 city 参数"
+        var city = args.optString("city", "").trim()
+        val ctx = ToolRegistry.appContext
+        // 三级降级：①参数带城市 ②设置页「我的城市」 ③IP 定位（wttr.in 不带城市）
+        if (city.isEmpty() && ctx != null) {
+            city = com.operit.qwenapp.SettingsActivity.getCity(ctx).trim()
+        }
         return try {
+            val useIp = city.isEmpty()
             // 用 format=j1 拿完整 JSON，自己解析出「气温/体感/描述/湿度」，
             // 明确标注字段，避免小模型把「体感温度」当成「气温」复述（原来 fmt=3 只有一行 +11°C）
-            val url = URI("https://wttr.in/${java.net.URLEncoder.encode(city, "UTF-8")}?format=j1&lang=zh").toURL()
+            val url = if (useIp) {
+                URI("https://wttr.in/?format=j1&lang=zh").toURL()
+            } else {
+                URI("https://wttr.in/${java.net.URLEncoder.encode(city, "UTF-8")}?format=j1&lang=zh").toURL()
+            }
             val conn = url.openConnection() as java.net.HttpURLConnection
             conn.connectTimeout = 8000
             conn.readTimeout = 10000
@@ -30,9 +39,10 @@ class WeatherTool : Tool {
             conn.disconnect()
             val obj = try { JSONObject(text) } catch (e: Exception) { null }
             if (obj == null || text.contains("Unknown location") || text.isBlank()) {
-                "查询失败：未找到城市 $city 的天气"
+                if (useIp) "查询失败：无法自动定位，请直接告诉我城市（如 南宁天气）"
+                else "查询失败：未找到城市 $city 的天气"
             } else {
-                parse(obj, city)
+                parse(obj, if (useIp) "（按网络定位）" else city)
             }
         } catch (e: Exception) {
             "查询失败：${e.message}"
