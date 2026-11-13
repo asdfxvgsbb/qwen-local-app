@@ -107,6 +107,25 @@
                 android:text="选择"
                 android:layout_marginStart="8dp" />
         </LinearLayout>
+
+        <!-- 我的城市 -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="我的城市（查天气不写城市时用）"
+            android:textSize="14sp"
+            android:textColor="#616161" />
+
+        <EditText
+            android:id="@+id/etCity"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:inputType="text"
+            android:hint="如 南宁 / 桂林 / 广州（留空则自动按网络定位猜）"
+            android:padding="8dp"
+            android:layout_marginBottom="12dp"
+            android:background="@android:drawable/editbox_background" />
+
         <!-- 网络搜索开关 -->
         <TextView
             android:layout_width="wrap_content"
