@@ -95,7 +95,18 @@ class ControlDeviceTool : Tool {
             "open" -> {
                 val app = args.optString("app", "")
                 if (app.isEmpty()) "错误：open 需要应用名或包名"
-                else openApp(app).let { if (it.startsWith("✅")) it else "打开失败: $it" }
+                else {
+                    val r = openApp(app)
+                    if (r.startsWith("✅")) {
+                        // 认屏闭环：打开后等界面加载 → 自动截图识别屏幕文字+坐标
+                        // 让模型真正"看到"当前界面（哪个是群/按钮在哪），再决定点哪，而不是盲点
+                        try { Thread.sleep(1800) } catch (_: Exception) {}
+                        val see = try {
+                            ScreenReadTool().execute(JSONObject().put("action", "read"))
+                        } catch (e: Exception) { "（自动认屏失败: ${e.message}）" }
+                        "$r\n\n【当前屏幕文字+坐标】\n$see\n\n请分析屏幕内容，决定下一步点击哪个目标（用 tap 传坐标），或继续完成用户需求。"
+                    } else r
+                }
             }
             else -> "错误：未知 action $action（支持 tap/swipe/text/key/screencap/open）"
         }
