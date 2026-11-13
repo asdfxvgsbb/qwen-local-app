@@ -73,7 +73,8 @@ object ToolRegistry {
         WebSummaryTool(),   // 【网页摘要】抓取网页正文
         ExchangeRateTool(), // 【汇率】实时汇率换算
         SmsTool(),          // 【发短信】需权限+确认
-        CallTool()          // 【打电话】需权限+确认
+        CallTool(),         // 【打电话】需权限+确认
+        LookupContactTool() // 【查联系人】按名字查通讯录号码（只查不拨号）
     )
 
     /** 生成传给 /v1/chat/completions 的 tools 参数（names 为 null 时传全部） */
