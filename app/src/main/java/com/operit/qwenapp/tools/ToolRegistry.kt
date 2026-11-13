@@ -75,7 +75,8 @@ object ToolRegistry {
         SmsTool(),          // 【发短信】需权限+确认
         CallTool(),         // 【打电话】需权限+确认
         LookupContactTool(), // 【查联系人】按名字查通讯录号码（只查不拨号）
-        ControlDeviceTool()  // 【操控手机】tap/swipe/text/key/screencap/open（需 Shizuku）
+        ControlDeviceTool(),  // 【操控手机】tap/swipe/text/key/screencap/open（需 Shizuku）
+        ScreenReadTool()      // 【屏幕理解】截图+OCR 识别文字及坐标，先看屏幕再操作
     )
 
     /** 生成传给 /v1/chat/completions 的 tools 参数（names 为 null 时传全部） */
