@@ -90,8 +90,21 @@ class WebSearchTool : Tool {
         }
     }
 
-    /** 用 cn.bing 搜索页抓前 5 条结果 */
+    /** 用 cn.bing 搜索页抓前 5 条结果；失败时自动切百度备用源 */
     private fun searchBing(query: String): String {
+        return try {
+            searchBingImpl(query)
+        } catch (e: Exception) {
+            // Bing 源失败（可能被反爬/超时）→ 自动切百度
+            try {
+                searchBaiduImpl(query)
+            } catch (e2: Exception) {
+                "搜索失败：${e.message}；百度备用源也失败：${e2.message}"
+            }
+        }
+    }
+
+    private fun searchBingImpl(query: String): String {
         val url = "https://cn.bing.com/search?q=" + URLEncoder.encode(query, "UTF-8")
         val conn = URL(url).openConnection() as HttpURLConnection
         conn.connectTimeout = 8000
@@ -112,6 +125,37 @@ class WebSearchTool : Tool {
             val link = m.groupValues[1]
             val title = m.groupValues[2].replace(Regex("<[^>]+>"), "").trim()
             val snippet = m.groupValues[3].replace(Regex("<[^>]+>"), "").trim()
+            if (title.isEmpty()) continue
+            sb.append("$i. ").append(title).append('\n')
+            if (snippet.isNotEmpty()) sb.append(snippet).append('\n')
+            sb.append("（").append(link).append("）\n")
+        }
+        return sb.toString().trim()
+    }
+
+    /** 百度备用搜索源 */
+    private fun searchBaiduImpl(query: String): String {
+        val url = "https://www.baidu.com/s?wd=" + URLEncoder.encode(query, "UTF-8") + "&ie=utf-8"
+        val conn = URL(url).openConnection() as HttpURLConnection
+        conn.connectTimeout = 8000
+        conn.readTimeout = 8000
+        conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 9) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0 Mobile Safari/537.36")
+        conn.setRequestProperty("Accept-Language", "zh-CN,zh;q=0.9")
+        val html = conn.inputStream.bufferedReader().use { it.readText() }
+        conn.disconnect()
+
+        // 百度结果容器：<div class="result c-container" ...><h3 ...><a href="...">标题</a></h3>...摘要
+        val liRegex = Regex("<div[^>]*class=\"[^\"]*result[^\"]*c-container[^\"]*\"[\\s\\S]*?<h3[^>]*>\\s*<a[^>]*href=\"([^\"]+)\"[^>]*>([\\s\\S]*?)</a>\\s*</h3>[\\s\\S]*?(?:<span[^>]*class=\"[^\"]*content-right[^\"]*\"[^>]*>([\\s\\S]*?)</span>)?")
+        val matches = liRegex.findAll(html).take(5).toList()
+        if (matches.isEmpty()) return "「$query」百度没搜到结果（可能是反爬），换个说法试试"
+
+        val sb = StringBuilder("「$query」搜索结果：\n")
+        var i = 0
+        for (m in matches) {
+            i++
+            val link = m.groupValues[1]
+            var title = m.groupValues[2].replace(Regex("<[^>]+>"), "").replace(Regex("\\s+"), " ").trim()
+            val snippet = m.groupValues[3].replace(Regex("<[^>]+>"), "").replace(Regex("\\s+"), " ").trim()
             if (title.isEmpty()) continue
             sb.append("$i. ").append(title).append('\n')
             if (snippet.isNotEmpty()) sb.append(snippet).append('\n')
