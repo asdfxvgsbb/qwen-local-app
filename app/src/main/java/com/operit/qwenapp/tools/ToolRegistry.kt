@@ -106,10 +106,50 @@ object ToolRegistry {
             }
         }
         return try {
-            val args = if (arguments.isBlank()) JSONObject() else JSONObject(arguments)
+            val args = parseArguments(arguments)
             tool.execute(args)
         } catch (e: Exception) {
             "工具执行出错: ${e.message}"
         }
+    }
+
+    /**
+     * 宽松解析模型生成的工具参数：
+     * 小模型（如 Qwen3-0.6B）常输出带杂引号/多余字符的 JSON，直接 JSONObject() 会抛异常。
+     * 策略：截取首尾大括号之间 → 统一引号 → 若仍失败，用正则兜底提取常用字段。
+     */
+    private fun parseArguments(arguments: String): JSONObject {
+        val raw = arguments?.trim() ?: return JSONObject()
+        // 1. 截取第一个 { 到最后一个 } 之间的内容，去掉前缀杂字符
+        val s = raw.indexOf('{'); val e = raw.lastIndexOf('}')
+        val core = if (s >= 0 && e > s) raw.substring(s, e + 1) else raw
+        // 2. 尝试直接解析
+        try { return JSONObject(core) } catch (_: Exception) {}
+        // 3. 统一引号：中文/单引号 → 英文双引号
+        val fixed = core
+            .replace('‘', '"').replace('’', '"')
+            .replace('“', '"').replace('”', '"')
+            .replace('\'', '"')
+        try { return JSONObject(fixed) } catch (_: Exception) {}
+        // 4. 正则兜底：提取常见字段（保持小模型可用）
+        val obj = JSONObject()
+        val action = Regex("\"action\"\\s*[:=]\\s*\"([^\"]+)\"").find(fixed)
+        if (action != null) obj.put("action", action.groupValues[1])
+        val app = Regex("\"app\"\\s*[:=]\\s*\"([^\"]+)\"").find(fixed)
+        if (app != null) obj.put("app", app.groupValues[1])
+        val key = Regex("\"key\"\\s*[:=]\\s*\"([^\"]+)\"").find(fixed)
+        if (key != null) obj.put("key", key.groupValues[1])
+        val text = Regex("\"text\"\\s*[:=]\\s*\"([^\"]+)\"").find(fixed)
+        if (text != null) obj.put("text", text.groupValues[1])
+        val x = Regex("\"x\"\\s*[:=]\\s*(\\d+)").find(fixed)
+        if (x != null) obj.put("x", x.groupValues[1].toInt())
+        val y = Regex("\"y\"\\s*[:=]\\s*(\\d+)").find(fixed)
+        if (y != null) obj.put("y", y.groupValues[1].toInt())
+        val x2 = Regex("\"x2\"\\s*[:=]\\s*(\\d+)").find(fixed)
+        if (x2 != null) obj.put("x2", x2.groupValues[1].toInt())
+        val y2 = Regex("\"y2\"\\s*[:=]\\s*(\\d+)").find(fixed)
+        if (y2 != null) obj.put("y2", y2.groupValues[1].toInt())
+        if (obj.length() > 0) return obj
+        return JSONObject()  // 全失败：空对象，让工具自己给缺参提示
     }
 }
