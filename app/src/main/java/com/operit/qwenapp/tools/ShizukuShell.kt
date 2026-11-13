@@ -39,7 +39,7 @@ object ShizukuShell {
     fun exec(cmd: String, timeoutMs: Long = 15000): Pair<Int, String> {
         return try {
             if (!isAvailable()) return -1 to "Shizuku 不可用"
-            val process = rikka.shizuku.Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
+            val process = reflectNewProcess(cmd)
             val out = StringBuilder()
             val err = StringBuilder()
             // 读取线程
@@ -78,5 +78,17 @@ object ShizukuShell {
         } else {
             -1 to "输入法暂不支持中文直接输入（可尝试先用备忘录粘贴）"
         }
+    }
+
+    /**
+     * 反射调用 Shizuku.newProcess（13.1.5 中为 private static，无公开替代 API）。
+     * Shizuku 是普通库类而非系统 hidden API，反射 setAccessible(true) 无兼容性风险。
+     * 签名：private static ShizukuRemoteProcess newProcess(String[] cmd, String[] env, String dir)
+     */
+    private fun reflectNewProcess(cmd: String): Process {
+        val method = rikka.shizuku.Shizuku::class.java
+            .getDeclaredMethod("newProcess", Array<String>::class.java, Array<String>::class.java, String::class.java)
+        method.isAccessible = true
+        return method.invoke(null, arrayOf("sh", "-c", cmd), null, null) as Process
     }
 }
