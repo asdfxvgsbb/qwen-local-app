@@ -20,9 +20,24 @@ class BrightnessTool : Tool {
 
     override fun execute(args: JSONObject): String {
         val ctx = ToolRegistry.appContext ?: return "错误：应用上下文未初始化"
-        // 检查"修改系统设置"授权
+        // 检查"修改系统设置"授权，未授权时弹确认框引导跳转系统设置页
         if (!Settings.System.canWrite(ctx)) {
-            return "需要「修改系统设置」权限：请到 系统设置→应用→本地Agent→权限→修改系统设置 打开，或在设置页手动授权后再试"
+            val go = ToolRegistry.confirm(
+                "需要「修改系统设置」权限",
+                "调节屏幕亮度需要系统授权。\n\n点击「去授权」将跳转到系统设置页，请找到「本地 Agent」并打开「修改系统设置」开关，然后返回重试。"
+            )
+            if (go) {
+                try {
+                    val intent = Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                        Uri.parse("package:${ctx.packageName}"))
+                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    ctx.startActivity(intent)
+                    return "已为你打开系统设置页，请开启「修改系统设置」权限后，再叫我调亮度"
+                } catch (e: Exception) {
+                    return "无法打开设置页：${e.message}。请手动到 系统设置→应用→本地 Agent→权限→修改系统设置 开启"
+                }
+            }
+            return "已取消（未授权时无法调节亮度，可到设置页手动开启）"
         }
         return try {
             val cur = Settings.System.getInt(ctx.contentResolver, Settings.System.SCREEN_BRIGHTNESS, 128) // 0-255
