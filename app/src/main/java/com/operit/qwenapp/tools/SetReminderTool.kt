@@ -32,8 +32,7 @@ class SetReminderTool : Tool {
 
         // Android 13+ (API 33) 通知权限：未授权时引导
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
-            ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS)
-            != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            ctx.checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
             val go = ToolRegistry.confirm(
                 "需要通知权限",
                 "提醒到点后需要发送通知。\n\n点击「去授权」将跳转到系统设置开启通知权限，然后返回重试。"
