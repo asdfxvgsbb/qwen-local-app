@@ -16,8 +16,7 @@ object ContactsHelper {
     /** 是否已有通讯录读取权限 */
     fun hasPermission(ctx: Context): Boolean {
         return try {
-            ctx.checkSelfPermission(android.Manifest.permission.READ_CONTACTS)
-                == android.content.pm.PackageManager.PERMISSION_GRANTED
+            ctx.checkSelfPermission(android.Manifest.permission.READ_CONTACTS) == android.content.pm.PackageManager.PERMISSION_GRANTED
         } catch (e: Exception) { false }
     }
 
