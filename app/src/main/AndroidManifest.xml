@@ -12,6 +12,8 @@
         android:maxSdkVersion="32" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
         tools:ignore="ScopedStorage" />
+    <!-- Shizuku 提权（可选：装了且授权才能操控手机） -->
+    <uses-permission android:name="moe.shizuku.manager.permission.API_V23" />
 
     <application
         android:allowBackup="true"
@@ -33,5 +35,14 @@
         <activity
             android:name=".SettingsActivity"
             android:exported="false" />
+
+        <!-- Shizuku Provider：连接系统 Shizuku 服务（未安装 Shizuku 时不影响运行） -->
+        <provider
+            android:name="rikka.shizuku.ShizukuProvider"
+            android:authorities="${applicationId}.shizuku"
+            android:multiprocess="false"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.INTERACT_ACROSS_USERS_FULL" />
     </application>
 </manifest>
