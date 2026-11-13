@@ -65,7 +65,8 @@ class ChatClient {
             "flashlight" to "手电筒",
             "vibrate" to "震动",
             "send_sms" to "发短信",
-            "make_call" to "打电话"
+            "make_call" to "打电话",
+            "screen_read" to "屏幕读取"
         )
         val sb = StringBuilder()
         var first = true
@@ -106,7 +107,8 @@ class ChatClient {
         "send_sms" to listOf("发短信", "发信息给", "短信给", "发条短信", "短信发"),
         "make_call" to listOf("打电话给", "打电话", "拨号", "呼叫", "打给"),
         "lookup_contact" to listOf("查一下电话", "查电话", "查联系人", "找电话", "电话是多少", "电话多少", "手机号是多少", "号码是多少", "查一下通讯录"),
-        "control_device" to listOf("点击屏幕", "点一下", "滑动屏幕", "滑一下", "操控手机", "输入文字", "按键", "返回键", "主页键", "截图", "打开微信", "打开qq", "打开抖音", "打开b站", "打开设置", "帮我点")
+        "control_device" to listOf("点击屏幕", "点一下", "滑动屏幕", "滑一下", "操控手机", "输入文字", "按键", "返回键", "主页键", "截图", "打开微信", "打开qq", "打开抖音", "打开b站", "打开设置", "帮我点"),
+        "screen_read" to listOf("看看屏幕", "屏幕上有什么", "屏幕上有啥", "读屏幕", "先截图看看", "看下屏幕", "看看现在屏幕", "屏幕内容", "看屏幕", "帮我看看屏幕")
     )
 
     /** 根据用户消息返回需要带的工具名列表（未命中则空 = 不带工具直接聊天） */
@@ -528,6 +530,12 @@ class ChatClient {
                 .put("content", result))
             executed = true
         }
+        // 强制收敛：工具结果已入历史，追加一条 user 指令，逼模型下一轮必须用自然语言总结，
+        // 避免小模型继续模仿输出 JSON（"又调用一次工具但没结果"的根因）
+        if (executed) {
+            history.add(JSONObject().put("role", "user").put("content",
+                "（工具已执行完毕）请直接用一句自然中文总结工具结果并回答用户，严禁再输出任何JSON或工具调用。"))
+        }
         return executed
     }
 
@@ -586,6 +594,9 @@ class ChatClient {
                 }
                 // 关键修复：已通过 tool_calls 执行过工具，清空 toolNames 避免下一轮重复执行
                 toolNames = emptyList()
+                // 强制收敛：工具结果已入历史，下一轮必须用自然语言总结（防止小模型继续吐JSON）
+                history.add(JSONObject().put("role", "user").put("content",
+                    "（工具已执行完毕）请直接用一句自然中文总结工具结果并回答用户，严禁再输出任何JSON或工具调用。"))
                 // 继续下一轮，让模型根据结果总结
             } else {
                 // 正常文本回答（模型没调工具）
@@ -751,6 +762,9 @@ class ChatClient {
                 // 关键修复：这一轮已通过 tool_calls 执行过工具，清空 toolNames，
                 // 避免下一轮又触发 forceRunTools 把同样的工具重复执行一遍（卡片会重复出现）
                 toolNames = emptyList()
+                // 强制收敛：工具结果已入历史，下一轮必须用自然语言总结（防止小模型继续吐JSON）
+                history.add(JSONObject().put("role", "user").put("content",
+                    "（工具已执行完毕）请直接用一句自然中文总结工具结果并回答用户，严禁再输出任何JSON或工具调用。"))
                 // 继续下一轮流式输出最终回答
             } else {
                 // 纯文本回答结束
