@@ -13,24 +13,24 @@ object ShizukuShell {
 
     /** Shizuku 是否可用（已授权） */
     fun isAvailable(): Boolean = try {
-        dev.rikka.shizuku.Shizuku.pingBinder() &&
-            dev.rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
+        rikka.shizuku.Shizuku.pingBinder() &&
+            rikka.shizuku.Shizuku.checkSelfPermission() == android.content.pm.PackageManager.PERMISSION_GRANTED
     } catch (e: Throwable) { false }
 
     /** 是否已安装 Shizuku（服务存在） */
     fun isInstalled(): Boolean = try {
-        dev.rikka.shizuku.Shizuku.pingBinder()
+        rikka.shizuku.Shizuku.pingBinder()
     } catch (e: Throwable) { false }
 
     /** 引导用户去授权（返回 true 表示已发引导） */
     fun requestPermission(activity: android.app.Activity?): Boolean {
         return try {
             if (!isInstalled()) return false
-            if (dev.rikka.shizuku.Shizuku.isPreV11() || dev.rikka.shizuku.Shizuku.getVersion() < 11) {
-                dev.rikka.shizuku.Shizuku.shouldShowSystemPermissionDialog(activity?.packageName ?: "")
-                return true
+            // 老版本 Shizuku（系统授权弹窗）无法直接用 API 引导，交由用户去 Shizuku App 授权
+            if (rikka.shizuku.Shizuku.isPreV11() || rikka.shizuku.Shizuku.getVersion() < 11) {
+                return false
             }
-            dev.rikka.shizuku.Shizuku.requestPermission(0)
+            rikka.shizuku.Shizuku.requestPermission(0)
             true
         } catch (e: Throwable) { false }
     }
@@ -39,7 +39,7 @@ object ShizukuShell {
     fun exec(cmd: String, timeoutMs: Long = 15000): Pair<Int, String> {
         return try {
             if (!isAvailable()) return -1 to "Shizuku 不可用"
-            val process = dev.rikka.shizuku.Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
+            val process = rikka.shizuku.Shizuku.newProcess(arrayOf("sh", "-c", cmd), null, null)
             val out = StringBuilder()
             val err = StringBuilder()
             // 读取线程
