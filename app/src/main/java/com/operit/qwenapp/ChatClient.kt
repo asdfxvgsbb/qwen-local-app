@@ -278,9 +278,151 @@ class ChatClient {
                 val phone = Regex("(\\d{5,13})").find(userText)?.groupValues?.get(1)
                 if (phone == null) null else JSONObject().put("phone", phone)
             }
-            // run_code / file_ops / run_terminal / unit_convert / memorize / clipboard 参数复杂，不强行调用
+            // ---- 以下为 v9.17 新增自动参数提取（之前关键词命中但执行不了） ----
+            "unit_convert" -> autoUnitConvert(userText)
+            "memorize" -> autoMemorize(userText)
+            "clipboard" -> autoClipboard(userText)
+            "run_terminal" -> autoTerminal(userText)
+            "file_ops" -> autoFileOps(userText)
+            "run_code" -> autoRunCode(userText)
             else -> null
         }
+    }
+
+    /** 单位换算：如「5公里等于多少米」「100斤等于多少公斤」「30摄氏度等于华氏度」
+     *  匹配策略：按单位在文本中出现的位置排序（在前=from，在后=to），
+     *  同位置时优先长单位（避免 m/mb、g/gb、k/kg 误匹配）。 */
+    private fun autoUnitConvert(userText: String): JSONObject? {
+        val num = Regex("(\\d+(?:\\.\\d+)?)").find(userText)?.groupValues?.get(1)?.toDoubleOrNull()
+            ?: return null
+        // 单位 → (类别, 标准单位)。注意：保留单字母的米/克映射给长度/重量，
+        // 数据单位只用完整 mb/gb/kb，避免 map 键冲突
+        val unitMap = mapOf(
+            "公里" to ("length" to "km"), "千米" to ("length" to "km"), "km" to ("length" to "km"),
+            "厘米" to ("length" to "cm"), "cm" to ("length" to "cm"),
+            "毫米" to ("length" to "mm"), "mm" to ("length" to "mm"),
+            "米" to ("length" to "m"), "m" to ("length" to "m"),
+            "吨" to ("weight" to "t"), "t" to ("weight" to "t"),
+            "公斤" to ("weight" to "kg"), "千克" to ("weight" to "kg"), "kg" to ("weight" to "kg"),
+            "斤" to ("weight" to "g"),  // 1斤=500g，特判换算
+            "克" to ("weight" to "g"), "g" to ("weight" to "g"),
+            "gb" to ("data" to "gb"),
+            "mb" to ("data" to "mb"),
+            "kb" to ("data" to "kb"),
+            "摄氏度" to ("temperature" to "c"), "华氏度" to ("temperature" to "f"),
+            "℃" to ("temperature" to "c"), "℉" to ("temperature" to "f")
+        )
+        // 收集命中单位并按出现位置排序；同位置长单位优先（"km" 排在 "m" 前等）
+        val lower = userText.lowercase()
+        val hits = unitMap.entries
+            .mapNotNull { (k, v) ->
+                val idx = lower.indexOf(k.lowercase())
+                if (idx >= 0) Triple(idx, k.length, v) else null
+            }
+            .sortedWith(compareBy<Triple<Int, Int, Pair<String, String>>> { it.first }
+                .thenByDescending { it.second })
+            .map { it.third }
+            .distinct()
+        if (hits.size < 2) return null
+        val (catFrom, unitFrom) = hits[0]
+        val (catTo, unitTo) = hits[1]
+        if (catFrom != catTo) return null // 跨类别不支持
+        // 特判：文本含"斤"且目标单位是 kg/t/g → 源单位按斤处理（1斤=500g）
+        if (catFrom == "weight" && lower.contains("斤")) {
+            val kgIdx = lower.indexOf("公斤").let { if (it >= 0) it else lower.indexOf("kg") }
+            if (kgIdx > lower.indexOf("斤")) { // "斤"在目标单位之前 → 斤是源单位
+                return JSONObject().put("category", "weight").put("value", num * 500.0)
+                    .put("from", "g").put("to", unitTo)
+            }
+        }
+        return JSONObject().put("category", catFrom)
+            .put("value", num).put("from", unitFrom).put("to", unitTo)
+    }
+
+    /** 记忆：如「记住我的生日是5月20日」「我生日是什么时候」「忘掉生日」 */
+    private fun autoMemorize(userText: String): JSONObject? {
+        if (userText.contains("记住") || userText.contains("记一下") || userText.contains("别忘")) {
+            // 提取 key：模式「的(KEY)是」或「(KEY)是」；默认 key=备忘
+            val m = Regex("的?([\\u4e00-\\u9fa5A-Za-z0-9]{1,8})(?:是|为)[：:]?([\\s\\S]+)").find(userText)
+                ?: return null
+            val key = m.groupValues[1].trim()
+            val value = m.groupValues[2].trim().trim('。', '！', '？', '，', ' ', '！', '?', '.', '!')
+            if (key.isEmpty() || value.isEmpty()) return null
+            return JSONObject().put("action", "remember").put("key", key).put("value", value)
+        }
+        if (userText.contains("忘了") || userText.contains("忘记") || userText.contains("忘掉")) {
+            val m = Regex("忘[了记掉].*?的?([\\u4e00-\\u9fa5A-Za-z0-9]{1,8})").find(userText)
+            val key = m?.groupValues?.get(1) ?: "备忘"
+            return JSONObject().put("action", "forget").put("key", key)
+        }
+        // 回忆：「我的生日是几号」「我叫什么」「还记得…吗」
+        val m = Regex("我的?([\\u4e00-\\u9fa5A-Za-z0-9]{1,8})(?:是)?(?:几|什么|多少|吗|是什么)?[？?]?$|还记得.*?([\\u4e00-\\u9fa5]{1,8})|([\\u4e00-\\u9fa5]{1,8})是(?:几号|什么|多少)").find(userText)
+        val query = m?.let {
+            it.groupValues[1].ifEmpty { it.groupValues[2].ifEmpty { it.groupValues[3] } }
+        } ?: userText.replace(Regex("我|的|是|几|什么|多少|吗|还|记得|？|?|，"), "").take(6)
+        return if (query.isBlank()) null else JSONObject().put("action", "recall").put("query", query)
+    }
+
+    /** 剪贴板：如「复制hello」「把这个复制一下」「粘贴出来」「看看剪贴板」 */
+    private fun autoClipboard(userText: String): JSONObject? {
+        if (userText.contains("粘贴") || userText.contains("看看剪贴板") || userText.contains("读取剪贴板") || userText.contains("剪贴板里")) {
+            return JSONObject().put("action", "read")
+        }
+        if (userText.contains("复制") || userText.contains("拷贝")) {
+            var t = userText.replace(Regex("帮我|请|复制|拷贝|一下|这个|内容|网址|链接"), "").trim()
+            t = t.trim('。', '！', '？', '，', ' ', '.', '!', '?')
+            if (t.isEmpty()) return null
+            return JSONObject().put("action", "write").put("text", t)
+        }
+        return null
+    }
+
+    /** 终端：如「执行 ls /sdcard」「运行 pwd」「用终端看看当前目录」 */
+    private fun autoTerminal(userText: String): JSONObject? {
+        // 去掉触发词后，剩余像是 shell 命令的整段
+        var t = userText.replace(Regex("帮我|请|用终端|终端|执行|运行|跑一下|命令[:：]?"), "").trim()
+        t = t.trim('。', '！', '？', '，', ' ', '.', '!', '?')
+        if (t.isEmpty() || t.length > 100) return null
+        // 粗略判断像命令（常见命令词开头）
+        val cmdLike = Regex("^(ls|cd|cat|pwd|echo|date|whoami|id|df|du|ps|top|ifconfig|ip|mount|cp|mv|mkdir|touch|head|tail|grep|find|which|uname|getprop|dumpsys|settings|pm|am|wc|sort|uniq|sh|bash|python)\\b")
+        if (cmdLike.containsMatchIn(t)) return JSONObject().put("cmd", t)
+        return null
+    }
+
+    /** 文件：如「读取 /sdcard/ai/test.txt」「把 hello 写入 /sdcard/ai/a.txt」 */
+    private fun autoFileOps(userText: String): JSONObject? {
+        val pathM = Regex("(/[\\w\\-./\u4e00-\u9fa5]+\\.\\w+)").find(userText)
+            ?: return null
+        val path = pathM.groupValues[1]
+        return if (userText.contains("读") || userText.contains("看看") || userText.contains("查看") || userText.contains("打开")) {
+            JSONObject().put("action", "read").put("path", path)
+        } else if (userText.contains("写") || userText.contains("保存") || userText.contains("创建")) {
+            // 提取要写的内容：在"写入/保存"后面、路径之外的部分
+            var content = userText.replace(path, "").replace(Regex("帮我|请|把|将|写入|写|保存|创建|内容[:：]?|文件[:：]?"), "").trim()
+            content = content.trim('。', '！', '？', '，', ' ', '.', '!', '?', '：', ':')
+            if (content.isEmpty()) return null
+            JSONObject().put("action", "write").put("path", path).put("content", content)
+        } else null
+    }
+
+    /** 代码：如「用javascript算 15*3」「运行代码 print(1+1)」 */
+    private fun autoRunCode(userText: String): JSONObject? {
+        val lang = when {
+            userText.contains("python") -> "python"
+            userText.contains("shell") || userText.contains("sh ") -> "shell"
+            else -> "javascript"
+        }
+        // 提取代码/表达式：在「算/计算」后提取算术式；或代码块 ```...```
+        val codeBlock = Regex("```(?:\\w+)?\\s*\\n?([\\s\\S]*?)```").find(userText)
+        if (codeBlock != null) {
+            val c = codeBlock.groupValues[1].trim()
+            if (c.isNotEmpty()) return JSONObject().put("language", lang).put("code", c)
+        }
+        val expr = Regex("[0-9+\\-*/().%\\s]+").find(userText)?.value?.trim()
+        if (expr != null && expr.any { it.isDigit() } && (userText.contains("算") || userText.contains("计算") || userText.contains("运行") || userText.contains("执行"))) {
+            return JSONObject().put("language", lang).put("code", expr)
+        }
+        return null
     }
 
     /**
