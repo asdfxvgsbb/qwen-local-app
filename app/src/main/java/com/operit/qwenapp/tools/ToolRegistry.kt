@@ -74,7 +74,8 @@ object ToolRegistry {
         ExchangeRateTool(), // 【汇率】实时汇率换算
         SmsTool(),          // 【发短信】需权限+确认
         CallTool(),         // 【打电话】需权限+确认
-        LookupContactTool() // 【查联系人】按名字查通讯录号码（只查不拨号）
+        LookupContactTool(), // 【查联系人】按名字查通讯录号码（只查不拨号）
+        ControlDeviceTool()  // 【操控手机】tap/swipe/text/key/screencap/open（需 Shizuku）
     )
 
     /** 生成传给 /v1/chat/completions 的 tools 参数（names 为 null 时传全部） */
@@ -95,6 +96,14 @@ object ToolRegistry {
     fun execute(name: String, arguments: String): String {
         val tool = tools.find { it.name == name }
             ?: return "错误：未知工具 $name"
+        // 悬浮窗显示工具调用内容（需要悬浮窗权限，未授权静默）
+        runCatching {
+            val ctx = appContext
+            if (ctx != null) {
+                val brief = arguments.take(60)
+                FloatWindowManager.show(ctx, "🔧 $name ${if (brief.isNotBlank()) "· $brief" else ""}")
+            }
+        }
         return try {
             val args = if (arguments.isBlank()) JSONObject() else JSONObject(arguments)
             tool.execute(args)
