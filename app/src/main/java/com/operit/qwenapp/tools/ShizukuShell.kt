@@ -57,12 +57,15 @@ object ShizukuShell {
             val finished = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             reader.join(2000)
             errReader.join(2000)
-            if (!finished) {
-                process.destroy()
-                return 124 to (out.toString().trim() + "\n[超时]".trim())
-            }
-            val code = process.exitValue()
             val combined = (out.toString() + err.toString()).trim()
+            if (!finished) {
+                // 超时：先温和 destroy，再强制，然后短暂等退出；无论如何不再调 exitValue()（会抛异常）
+                try { process.destroy() } catch (_: Exception) {}
+                try { process.waitFor(1500, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
+                return 124 to (combined.ifEmpty { "[超时] 命令执行超过 ${timeoutMs}ms" })
+            }
+            // 只有已正常退出才取 exitValue
+            val code = try { process.exitValue() } catch (_: Exception) { 0 }
             code to combined
         } catch (e: Exception) {
             -1 to "Shizuku 执行异常: ${e.message}"
