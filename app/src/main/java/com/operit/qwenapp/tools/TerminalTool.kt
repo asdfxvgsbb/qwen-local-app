@@ -28,8 +28,8 @@ class TerminalTool : Tool {
     override fun execute(args: JSONObject): String {
         val cmd = args.optString("cmd", "").trim()
         if (cmd.isEmpty()) return "错误：缺少 cmd 参数"
-        if (cmd.length > 500) return "错误：命令过长（最多500字符）"
-        val timeoutSec = args.optInt("timeout", 10).coerceIn(1, 30)
+        if (cmd.length > 800) return "错误：命令过长（最多800字符）"
+        val timeoutSec = args.optInt("timeout", 10).coerceIn(1, 120)
         return runCmd(cmd, timeoutSec)
     }
 
@@ -74,34 +74,36 @@ class TerminalTool : Tool {
         }
         return try {
             val (p, w) = acquireSession()
-            w.write((cmd + "\n").toByteArray())
+            // 结束标记：命令后追加 echo 标记，读到标记才算命令结束。
+            // 避免 ping/logcat 等持续输出命令被"150ms 无新输出"误判提前结束。
+            val marker = "__XDONE_${System.currentTimeMillis() % 1000000}__"
+            w.write((cmd + "\n" + "echo $marker\n").toByteArray())
             w.flush()
 
-            // 读取输出：循环读 stdout，150ms 无新内容且已有输出则视为命令结束；超时兜底
+            // 读取输出：循环读 stdout，直到出现结束标记；超时兜底
             val out = StringBuilder()
             val reader = p.inputStream.bufferedReader()
             val deadline = System.currentTimeMillis() + timeoutSec * 1000L
-            var lastRead = System.currentTimeMillis()
-            var gotAny = false
             var forceStop = false
+            var markerIdx = -1
             while (System.currentTimeMillis() < deadline && !forceStop) {
                 while (reader.ready()) {
                     out.append(reader.read().toChar())
-                    gotAny = true
-                    lastRead = System.currentTimeMillis()
                 }
-                if (gotAny && System.currentTimeMillis() - lastRead > 150) forceStop = true
-                if (!gotAny && System.currentTimeMillis() - lastRead > 250) forceStop = true
+                markerIdx = out.indexOf(marker)
+                if (markerIdx >= 0) forceStop = true
                 if (!forceStop) Thread.sleep(30)
             }
             if (System.currentTimeMillis() >= deadline) {
                 destroySession()
                 "命令超时（${timeoutSec}s），已终止并重置会话"
             } else {
+                // 去掉结束标记及其所在行
+                out.setLength(markerIdx)
                 val text = out.toString().trim()
                 when {
                     text.isBlank() -> "（无输出）"
-                    text.length > 3000 -> text.takeLast(3000) + "\n…（输出已截断，只显示最后3000字符）"
+                    text.length > 5000 -> text.takeLast(5000) + "\n…（输出已截断，只显示最后5000字符）"
                     else -> text
                 }
             }
