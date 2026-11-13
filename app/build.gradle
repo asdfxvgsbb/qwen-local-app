@@ -41,4 +41,6 @@ dependencies {
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3'
     implementation 'dev.rikka.shizuku:api:13.1.5'
     implementation 'dev.rikka.shizuku:provider:13.1.5'
+    // 屏幕 OCR：截图后识别文字+坐标，实现"先看屏幕再操作"（无 GMS 也可用，bundled 模型）
+    implementation 'com.google.mlkit:text-recognition-chinese:16.0.0'
 }
