@@ -105,7 +105,8 @@ class ChatClient {
         "vibrate" to listOf("震动一下", "振动一下", "手机震动"),
         "send_sms" to listOf("发短信", "发信息给", "短信给", "发条短信", "短信发"),
         "make_call" to listOf("打电话给", "打电话", "拨号", "呼叫", "打给"),
-        "lookup_contact" to listOf("查一下电话", "查电话", "查联系人", "找电话", "电话是多少", "电话多少", "手机号是多少", "号码是多少", "查一下通讯录")
+        "lookup_contact" to listOf("查一下电话", "查电话", "查联系人", "找电话", "电话是多少", "电话多少", "手机号是多少", "号码是多少", "查一下通讯录"),
+        "control_device" to listOf("点击屏幕", "点一下", "滑动屏幕", "滑一下", "操控手机", "输入文字", "按键", "返回键", "主页键", "截图", "打开微信", "打开qq", "打开抖音", "打开b站", "打开设置", "帮我点")
     )
 
     /** 根据用户消息返回需要带的工具名列表（未命中则空 = 不带工具直接聊天） */
@@ -298,6 +299,7 @@ class ChatClient {
                     .removeSuffix("吧").trim()
                 if (t.isEmpty() || t.length > 10) null else JSONObject().put("name", t)
             }
+            "control_device" -> autoControl(userText)
             // ---- 以下为 v9.17 新增自动参数提取（之前关键词命中但执行不了） ----
             "unit_convert" -> autoUnitConvert(userText)
             "memorize" -> autoMemorize(userText)
@@ -305,6 +307,49 @@ class ChatClient {
             "run_terminal" -> autoTerminal(userText)
             "file_ops" -> autoFileOps(userText)
             "run_code" -> autoRunCode(userText)
+            else -> null
+        }
+    }
+
+    /** 手机操控参数提取：把口语命令解析成 tap/swipe/text/key/open */
+    private fun autoControl(userText: String): JSONObject? {
+        val t = userText.trim()
+        return when {
+            // 滑动优先：滑动屏幕 500 900 到 500 300
+            t.contains("滑动") || t.contains("滑一下") || t.contains("滑到") || t.contains("下拉") || t.contains("上滑") -> {
+                val m = Regex("(\\d+)\\s*(?:,|，|\\s)\\s*(\\d+).*?(\\d+)\\s*(?:,|，|\\s)\\s*(\\d+)").find(t)
+                if (m != null) JSONObject().put("action", "swipe")
+                    .put("x", m.groupValues[1].toInt()).put("y", m.groupValues[2].toInt())
+                    .put("x2", m.groupValues[3].toInt()).put("y2", m.groupValues[4].toInt())
+                else if (t.contains("下拉")) JSONObject().put("action", "swipe").put("x", 540).put("y", 800).put("x2", 540).put("y2", 300)
+                else if (t.contains("上滑")) JSONObject().put("action", "swipe").put("x", 540).put("y", 300).put("x2", 540).put("y2", 800)
+                else null
+            }
+            // 点击：点击屏幕 500 300
+            t.contains("点击") || t.contains("点一下") || t.contains("点 ") || t.contains("帮我点") || t.contains("点开") -> {
+                val m = Regex("(\\d+)\\s*(?:,|，|\\s)\\s*(\\d+)").find(t)
+                if (m != null) JSONObject().put("action", "tap")
+                    .put("x", m.groupValues[1].toInt()).put("y", m.groupValues[2].toInt())
+                else null
+            }
+            // 输入文字
+            t.contains("输入") || t.contains("打字") || t.contains("填写") || t.contains("写文字") -> {
+                val m = Regex("(?:输入|打字|填写|写文字)(.+)$").find(t)
+                if (m != null) JSONObject().put("action", "text").put("text", m.groupValues[1].trim()) else null
+            }
+            // 按键
+            t.contains("返回") || t.contains("后退") -> JSONObject().put("action", "key").put("key", "back")
+            t.contains("主页") || t.contains("回桌面") || t.contains("回到桌面") -> JSONObject().put("action", "key").put("key", "home")
+            t.contains("回车") || t.contains("确定键") -> JSONObject().put("action", "key").put("key", "enter")
+            t.contains("音量加") || t.contains("声音大") || t.contains("调大声") -> JSONObject().put("action", "key").put("key", "volume_up")
+            t.contains("音量减") || t.contains("声音小") || t.contains("调小声") -> JSONObject().put("action", "key").put("key", "volume_down")
+            // 截图
+            t.contains("截图") || t.contains("截屏") || t.contains("截个图") -> JSONObject().put("action", "screencap")
+            // 打开应用
+            t.contains("打开") || t.contains("启动") || t.contains("开启") -> {
+                val m = Regex("(?:打开|启动|开启)(.+)$").find(t)
+                if (m != null) JSONObject().put("action", "open").put("app", m.groupValues[1].trim()) else null
+            }
             else -> null
         }
     }
