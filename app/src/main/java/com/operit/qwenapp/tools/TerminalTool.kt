@@ -38,21 +38,38 @@ class TerminalTool : Tool {
         @Volatile private var writer: OutputStream? = null
 
         /** 获取常驻 shell 会话（无则新建），进程存活时复用。
-         *  优先用内置 Termux bash（真 Linux 环境）；未就绪退回系统 sh。 */
+         *  优先顺序：Shizuku 系统权限 → 内置 Termux bash → 系统 sh。
+         *  Shizuku 可用时用 /system/bin/sh（有系统权限，能 pm/am/dumpsys/碰其它 App 数据）。 */
         @Synchronized
         private fun acquireSession(): Pair<Process, OutputStream> {
             val p = proc
             if (p != null && p.isAlive && writer != null) return p to writer!!
-            val ctx = ToolRegistry.appContext
-            val bash = ctx?.let { TermuxRuntime.bashPath(it) }
-            val np: Process = if (bash != null) {
-                val pb = ProcessBuilder(bash, "--noprofile", "--norc")
+            val np: Process
+            if (ShizukuShell.isAvailable()) {
+                // Shizuku：用系统 shell 权限跑，注入 PATH 让内置命令也能用
+                val pb = ProcessBuilder("/system/bin/sh")
                 pb.redirectErrorStream(true)
-                // 注入 Termux 环境变量，让子进程能找到 lib/命令
-                pb.environment().putAll(TermuxRuntime.env(ctx!!))
-                pb.start()
+                val ctx = ToolRegistry.appContext
+                if (ctx != null) {
+                    val env = TermuxRuntime.env(ctx)
+                    if (env.isNotEmpty()) {
+                        // 注入内置 bash 所在的 bin 到 PATH，让 /system/bin/sh 也能调用内置命令
+                        env["PATH"]?.let { pb.environment()["PATH"] = it }
+                        pb.environment()["LD_LIBRARY_PATH"] = env["LD_LIBRARY_PATH"] ?: ""
+                    }
+                }
+                np = pb.start()
             } else {
-                ProcessBuilder("sh").redirectErrorStream(true).start()
+                val ctx = ToolRegistry.appContext
+                val bash = ctx?.let { TermuxRuntime.bashPath(it) }
+                np = if (bash != null) {
+                    val pb = ProcessBuilder(bash, "--noprofile", "--norc")
+                    pb.redirectErrorStream(true)
+                    pb.environment().putAll(TermuxRuntime.env(ctx!!))
+                    pb.start()
+                } else {
+                    ProcessBuilder("sh").redirectErrorStream(true).start()
+                }
             }
             proc = np
             writer = np.outputStream
